@@ -1,0 +1,216 @@
+# SecDevOps CI/CD Pipeline Configuration
+# Execution groups and labels for easy reference
+
+pipeline:
+  name: SecDevOps E2E Pipeline
+  version: 1.0.0
+  repository: https://github.com/JezSurfaceIT/secdevops-cicd-pipeline
+
+execution_groups:
+  # Complete E2E pipeline execution
+  e2e-full:
+    label: "Complete End-to-End Pipeline"
+    description: "Full CI/CD pipeline from code to Azure deployment"
+    scripts:
+      - ./run-e2e-pipeline.sh
+    parameters:
+      app_name: "${APP_NAME:-dummy-app-e2e-test}"
+      version: "${VERSION:-v1.0}"
+    estimated_time: "100 seconds"
+    
+  # Security scanning only
+  security-scan:
+    label: "Security Scanning Suite"
+    description: "Run all security scans (SAST, DAST, dependency)"
+    scripts:
+      - ./scripts/security/run-zap-scan.sh
+    sub_groups:
+      - zap-baseline
+      - zap-full
+      - trivy-scan
+    
+  # Quality analysis only  
+  quality-check:
+    label: "Code Quality Analysis"
+    description: "SonarQube code quality and coverage analysis"
+    scripts:
+      - ./scripts/quality/run-sonarqube-scan.sh
+    parameters:
+      project_key: "${PROJECT_KEY:-secdevops-cicd}"
+      
+  # Deployment strategies
+  deployment:
+    label: "Deployment Strategies"
+    description: "Various deployment patterns"
+    sub_groups:
+      blue-green:
+        scripts:
+          - ./scripts/deployment/blue-green-deploy.sh
+        rollback:
+          - ./scripts/deployment/blue-green-rollback.sh
+      app-gateway:
+        scripts:
+          - ./deploy-with-app-gateway.sh
+        parameters:
+          allowed_ip: "${ALLOWED_IP:-86.3.129.121}"
+
+# Quick execution commands with labels
+quick_commands:
+  e2e:
+    label: "Run E2E Pipeline"
+    command: "./run-e2e-pipeline.sh dummy-app-e2e-test v1.0"
+    
+  jenkins:
+    label: "Trigger Jenkins Pipeline"
+    command: |
+      curl -X POST http://localhost:8080/job/SecDevOps-E2E-Pipeline/buildWithParameters \
+        -u admin:27eaee2a61aa4a5e97e04df34411b49f \
+        --data-urlencode "APP_NAME=dummy-app-e2e-test" \
+        --data-urlencode "VERSION=v1.0" \
+        --data-urlencode "BRANCH=main"
+    
+  zap-quick:
+    label: "Quick Security Scan"
+    command: "./scripts/security/run-zap-scan.sh http://172.178.53.198 baseline"
+    
+  sonar-quick:
+    label: "Quick Quality Scan"  
+    command: "./scripts/quality/run-sonarqube-scan.sh secdevops-cicd 'SecDevOps CICD'"
+    
+  deploy-blue-green:
+    label: "Blue-Green Deploy"
+    command: "./scripts/deployment/blue-green-deploy.sh dummy-app-e2e-test v1.2"
+    
+  rollback:
+    label: "Rollback Deployment"
+    command: "./scripts/deployment/blue-green-rollback.sh dummy-app-e2e-test blue"
+
+# Service endpoints
+services:
+  jenkins:
+    url: http://localhost:8080
+    credentials: 
+      user: admin
+      password: 27eaee2a61aa4a5e97e04df34411b49f
+      
+  prometheus:
+    url: http://localhost:9091
+    
+  grafana:
+    url: http://localhost:3000
+    credentials:
+      user: admin
+      password: admin123
+      
+  alertmanager:
+    url: http://localhost:9093
+    
+  application_gateway:
+    url: http://172.178.53.198
+    waf_enabled: true
+    allowed_ips:
+      - 86.3.129.121
+      
+  sonarqube:
+    url: http://localhost:9000
+    credentials:
+      user: admin
+      password: admin
+
+# Azure resources
+azure:
+  subscription: 80265df9-bba2-4ad2-88af-e002fd2ca230
+  resource_group: rg-secdevops-cicd-dev
+  location: eastus
+  
+  container_registry:
+    name: acrsecdevopsdev
+    url: acrsecdevopsdev.azurecr.io
+    
+  networking:
+    vnet: vnet-secdevops-test
+    subnet_containers: subnet-containers
+    subnet_appgateway: subnet-appgateway
+    
+  containers:
+    - name: dummy-app-private
+      ip: 10.0.1.4
+      port: 3001
+      
+  app_gateway:
+    name: appgw-secdevops-test
+    public_ip: 172.178.53.198
+    waf_policy: waf-policy-secdevops
+
+# Pipeline stages with labels
+stages:
+  - label: "Checkout"
+    id: checkout
+    type: source_control
+    
+  - label: "Code Analysis"
+    id: analysis
+    type: quality
+    parallel:
+      - lint
+      - security_scan
+      - trivy_scan
+      
+  - label: "Unit Tests"  
+    id: test
+    type: testing
+    coverage_threshold: 80
+    
+  - label: "Build"
+    id: build
+    type: container_build
+    
+  - label: "Security Scan"
+    id: container_scan
+    type: security
+    
+  - label: "Push to Registry"
+    id: push
+    type: registry
+    
+  - label: "Deploy Test"
+    id: deploy_test
+    type: deployment
+    environment: test
+    
+  - label: "E2E Tests"
+    id: e2e_test
+    type: testing
+    
+  - label: "Deploy Production"
+    id: deploy_prod
+    type: deployment
+    environment: production
+    approval_required: true
+
+# Labels for categorization
+labels:
+  pipeline_type:
+    - cicd
+    - secdevops
+    - azure
+    
+  security_tools:
+    - trivy
+    - owasp-zap
+    - sonarqube
+    
+  deployment_strategies:
+    - blue-green
+    - canary
+    - rolling
+    
+  monitoring:
+    - prometheus
+    - grafana
+    - alertmanager
+    
+  quality:
+    - coverage
+    - linting
+    - code-smell

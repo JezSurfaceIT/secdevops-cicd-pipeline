@@ -1,0 +1,65 @@
+// Azure Resource Graph Queries for SecDevOps Pipeline Resources
+// Use these queries in Azure Portal > Resource Graph Explorer
+
+// Query 1: Find all resources tagged with E2E pipeline
+Resources
+| where tags['Pipeline'] == 'SecDevOps-E2E'
+| project name, type, resourceGroup, location, tags, id
+| order by type asc
+
+// Query 2: Find all resources by execution group
+Resources
+| where tags['ExecutionGroup'] == 'e2e-full'
+| project name, type, resourceGroup, tags['Component'], tags['Stage'], tags['Version']
+| order by tags_Stage asc
+
+// Query 3: Find all production stage resources
+Resources
+| where tags['Stage'] == 'Production'
+| project name, type, resourceGroup, tags['SecurityLevel'], tags['AllowedIP']
+
+// Query 4: Get security-enabled resources
+Resources
+| where tags['SecurityLevel'] != ''
+| project name, type, tags['SecurityLevel'], tags['Component'], resourceGroup
+
+// Query 5: List all container instances with versions
+Resources
+| where type == 'microsoft.containerinstance/containergroups'
+| project name, tags['Version'], tags['DeploymentStrategy'], tags['Stage']
+
+// Query 6: Find WAF-protected resources
+Resources
+| where tags['SecurityLevel'] contains 'WAF'
+| project name, type, tags['AllowedIP'], resourceGroup
+
+// Query 7: Resources by environment
+Resources
+| where tags['Environment'] == 'Dev'
+| summarize count() by tostring(tags['Component'])
+
+// Query 8: Get deployment pipeline resources
+Resources
+| where tags['Pipeline'] == 'SecDevOps-E2E'
+| where tags['Stage'] in ('Build', 'Test', 'Production')
+| project name, type, stage=tags['Stage'], component=tags['Component']
+| order by case(
+    stage == 'Build', 1,
+    stage == 'Test', 2, 
+    stage == 'Production', 3,
+    4
+) asc
+
+// Query 9: Security scan enabled resources
+Resources
+| where tags['SecurityScan'] != '' or tags['SecurityLevel'] != ''
+| project name, type, securityScan=tags['SecurityScan'], securityLevel=tags['SecurityLevel']
+
+// Query 10: Quick E2E pipeline status check
+Resources
+| where tags['ExecutionGroup'] == 'e2e-full'
+| summarize 
+    TotalResources = count(),
+    ByComponent = make_set(tags['Component']),
+    ByStage = make_set(tags['Stage'])
+| project TotalResources, Components=array_length(ByComponent), Stages=array_length(ByStage), ComponentList=ByComponent, StageList=ByStage
