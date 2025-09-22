@@ -219,6 +219,14 @@ curl http://vm-jenkins-dev:8080/job/oversight-mvp/lastBuild/api/json
 - [Security Policies](./docs/SECURITY-POLICIES.md) - Security requirements
 - [API Documentation](./docs/API.md) - API endpoints and usage
 
+### 📊 Monitoring & Observability (NEW)
+- **Prometheus**: Metrics collection with HA deployment (Story 6.1 ✅)
+  - 15-day retention, Thanos for long-term storage
+  - Azure & Kubernetes service discovery
+  - Federation for multi-region metrics
+- **Grafana**: Dashboard visualization (Story 6.2 - In Progress)
+- **Infrastructure**: All deployed via IaC (Terraform)
+
 ---
 
 ## 👥 Team
