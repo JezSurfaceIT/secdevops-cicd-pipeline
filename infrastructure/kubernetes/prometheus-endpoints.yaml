@@ -1,0 +1,38 @@
+# Service Monitor and Pod Monitor definitions for application metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: application-metrics
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - default
+      - production
+      - staging
+  selector:
+    matchLabels:
+      prometheus: "true"
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: pod-metrics
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - default
+      - production
+      - staging
+  selector:
+    matchLabels:
+      prometheus.io/scrape: "true"
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics

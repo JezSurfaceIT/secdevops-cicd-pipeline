@@ -1,0 +1,8 @@
+tls_server_config:
+  cert_file: /etc/prometheus/certs/tls.crt
+  key_file: /etc/prometheus/certs/tls.key
+  
+basic_auth_users:
+  # Default admin user - password: admin123 (bcrypt hash)
+  # This should be changed in production
+  admin: $2a$10$XvWVfIJHgHR0eQVnZvLkHuHQh0MvNtZNL8t8eXrHq8TaF3Y4xJj3m

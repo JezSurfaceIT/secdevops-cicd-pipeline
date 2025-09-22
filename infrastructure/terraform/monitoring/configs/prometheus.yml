@@ -1,0 +1,121 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  external_labels:
+    cluster: '${environment}-${region}'
+    environment: '${environment}'
+    region: '${region}'
+
+# Remote write for long-term storage
+remote_write:
+  - url: "http://thanos-receiver.monitoring.svc.cluster.local:19291/api/v1/receive"
+    tls_config:
+      insecure_skip_verify: false
+    queue_config:
+      capacity: 10000
+      max_shards: 200
+      min_shards: 1
+      max_samples_per_send: 5000
+      batch_send_deadline: 5s
+      min_backoff: 30ms
+      max_backoff: 100ms
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+# Rules files
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+# Service discovery configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: '/metrics'
+
+  # Kubernetes API servers
+  - job_name: 'kubernetes-apiservers'
+    kubernetes_sd_configs:
+      - role: endpoints
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
+
+  # Kubernetes nodes
+  - job_name: 'kubernetes-nodes'
+    kubernetes_sd_configs:
+      - role: node
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+
+  # Kubernetes pods
+  - job_name: 'kubernetes-pods'
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+
+  # Azure service discovery
+  - job_name: 'azure-vms'
+    azure_sd_configs:
+      - subscription_id: "${azure_subscription_id}"
+        tenant_id: "${azure_tenant_id}"
+        client_id: "${azure_client_id}"
+        client_secret: "${azure_client_secret}"
+        refresh_interval: 300s
+        port: 9100
+    relabel_configs:
+      - source_labels: [__meta_azure_machine_name]
+        target_label: instance
+      - source_labels: [__meta_azure_machine_location]
+        target_label: location
+      - source_labels: [__meta_azure_machine_resource_group]
+        target_label: resource_group
+
+  # Federation configuration
+  - job_name: 'federate'
+    scrape_interval: 30s
+    honor_labels: true
+    metrics_path: '/federate'
+    params:
+      'match[]':
+        - '{job=~"kubernetes-.*"}'
+        - '{__name__=~"job:.*"}'
+        - '{__name__=~"instance:.*"}'
+        - '{__name__=~"business:.*"}'
+    static_configs:
+      - targets:
+        - 'prometheus-westus.monitoring.svc.cluster.local:9090'
+        - 'prometheus-northeurope.monitoring.svc.cluster.local:9090'

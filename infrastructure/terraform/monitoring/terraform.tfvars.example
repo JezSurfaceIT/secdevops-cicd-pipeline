@@ -1,0 +1,41 @@
+# Example Terraform variables file for Prometheus deployment
+# Copy this to terraform.tfvars and fill in your values
+
+# Environment Configuration
+environment = "dev"
+region      = "eus"
+
+# Azure Resources
+resource_group_name = "e2e-dev-eus-secops-app-001"
+aks_cluster_name   = "e2e-dev-eus-secops-aks-001"
+
+# Prometheus Configuration
+prometheus_replicas = 2
+prometheus_version  = "v2.45.0"
+
+# Thanos Configuration
+thanos_version = "v0.32.0"
+
+# OAuth2 Proxy Configuration
+oauth2_proxy_version = "v7.4.0"
+email_domain        = "oversight.com"
+
+# Azure Service Principal for Service Discovery
+# These should be set as environment variables:
+# export TF_VAR_azure_subscription_id="your-subscription-id"
+# export TF_VAR_azure_tenant_id="your-tenant-id"
+# export TF_VAR_azure_client_id="your-client-id"
+# export TF_VAR_azure_client_secret="your-client-secret"
+
+# Azure Storage for Thanos
+# Storage account name will be auto-generated
+# export TF_VAR_azure_storage_key="your-storage-key"
+
+# TLS Certificates (base64 encoded)
+# export TF_VAR_prometheus_tls_cert="base64-encoded-cert"
+# export TF_VAR_prometheus_tls_key="base64-encoded-key"
+
+# OAuth Configuration
+# export TF_VAR_oauth_client_id="your-oauth-client-id"
+# export TF_VAR_oauth_client_secret="your-oauth-client-secret"
+# export TF_VAR_cookie_secret="your-cookie-secret"

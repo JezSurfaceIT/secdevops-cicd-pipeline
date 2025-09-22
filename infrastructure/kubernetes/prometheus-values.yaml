@@ -1,0 +1,130 @@
+# Helm values for Prometheus deployment
+# Using kube-prometheus-stack chart
+
+global:
+  rbac:
+    create: true
+    pspEnabled: false
+
+# Prometheus Operator
+prometheusOperator:
+  enabled: true
+  serviceMonitor:
+    selfMonitor: true
+
+# Prometheus Configuration
+prometheus:
+  enabled: true
+  
+  prometheusSpec:
+    # High Availability configuration
+    replicas: 2
+    
+    # Resource naming following e2e-* convention
+    externalLabels:
+      cluster: "e2e-dev-eus-secops"
+      environment: "dev"
+    
+    # Storage configuration
+    retention: 15d
+    retentionSize: 50GB
+    
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: managed-premium
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 100Gi
+    
+    # Remote write to Thanos
+    remoteWrite:
+      - url: http://thanos-receiver:19291/api/v1/receive
+        queueConfig:
+          capacity: 10000
+          maxShards: 200
+          minShards: 1
+          maxSamplesPerSend: 5000
+    
+    # Service discovery
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    
+    # Resources
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: 1
+      limits:
+        memory: 4Gi
+        cpu: 2
+    
+    # Security
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      fsGroup: 65534
+    
+    # Additional configuration
+    enableAdminAPI: true
+    enableFeatures:
+      - remote-write-receiver
+      - memory-snapshot-on-shutdown
+
+# Grafana Configuration
+grafana:
+  enabled: false  # Will be deployed separately in story 6.2
+
+# Alertmanager Configuration
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    replicas: 2
+    retention: 120h
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: managed-premium
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+# Node Exporter
+nodeExporter:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+
+# Kube State Metrics
+kubeStateMetrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+
+# Prometheus Node Exporter
+prometheusNodeExporter:
+  enabled: true
+
+# Service Monitors for Kubernetes components
+kubeApiServer:
+  enabled: true
+kubeControllerManager:
+  enabled: true
+kubeScheduler:
+  enabled: true
+kubeProxy:
+  enabled: true
+kubelet:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+
+# Default dashboards
+defaultDashboardsEnabled: true
+
+# Network policies
+networkPolicy:
+  enabled: true

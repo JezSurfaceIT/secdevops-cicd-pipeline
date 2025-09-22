@@ -1,0 +1,73 @@
+groups:
+  - name: performance_rules
+    interval: 30s
+    rules:
+      # CPU usage
+      - record: instance:node_cpu:rate5m
+        expr: |
+          100 - (avg by (instance) (
+            rate(node_cpu_seconds_total{mode="idle"}[5m])
+          ) * 100)
+      
+      # Memory usage percentage
+      - record: instance:node_memory_usage:percentage
+        expr: |
+          100 - (
+            node_memory_MemAvailable_bytes / 
+            node_memory_MemTotal_bytes * 100
+          )
+      
+      # HTTP request rate
+      - record: job:http_requests:rate5m
+        expr: |
+          sum by (job, method, status) (
+            rate(http_requests_total[5m])
+          )
+      
+      # Error rate
+      - record: job:http_errors:rate5m
+        expr: |
+          sum by (job) (
+            rate(http_requests_total{status=~"5.."}[5m])
+          )
+      
+      # P95 latency
+      - record: job:http_request_duration:p95_5m
+        expr: |
+          histogram_quantile(0.95,
+            sum by (job, le) (
+              rate(http_request_duration_seconds_bucket[5m])
+            )
+          )
+      
+      # Database connection pool usage
+      - record: instance:db_connections:usage
+        expr: |
+          (pg_stat_database_numbackends / 
+           pg_settings_max_connections) * 100
+
+  - name: business_rules
+    interval: 60s
+    rules:
+      # Active users count
+      - record: business:active_users:count
+        expr: |
+          count(
+            increase(user_activity_total[1h]) > 0
+          )
+      
+      # Transaction rate per hour
+      - record: business:transactions:rate1h
+        expr: |
+          sum(rate(business_transaction_total[1h]))
+      
+      # Revenue per minute
+      - record: business:revenue:rate1m
+        expr: |
+          sum(rate(business_revenue_total[1m]))
+      
+      # API success rate
+      - record: business:api_success:rate5m
+        expr: |
+          sum(rate(http_requests_total{status=~"2.."}[5m])) / 
+          sum(rate(http_requests_total[5m]))

@@ -1,0 +1,53 @@
+groups:
+  - name: prometheus_alerts
+    interval: 30s
+    rules:
+      - alert: PrometheusDown
+        expr: up{job="prometheus"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: monitoring
+        annotations:
+          summary: "Prometheus instance is down"
+          description: "Prometheus instance {{ $labels.instance }} has been down for more than 5 minutes."
+      
+      - alert: PrometheusHighMemoryUsage
+        expr: process_resident_memory_bytes{job="prometheus"} / 1024 / 1024 / 1024 > 3.5
+        for: 10m
+        labels:
+          severity: warning
+          component: monitoring
+        annotations:
+          summary: "Prometheus high memory usage"
+          description: "Prometheus instance {{ $labels.instance }} is using more than 3.5GB of memory."
+      
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring
+        annotations:
+          summary: "Prometheus config reload failed"
+          description: "Prometheus configuration reload has failed on {{ $labels.instance }}."
+      
+      - alert: PrometheusTargetDown
+        expr: up == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: monitoring
+        annotations:
+          summary: "Prometheus target is down"
+          description: "Target {{ $labels.job }}/{{ $labels.instance }} has been down for more than 10 minutes."
+      
+      - alert: PrometheusRuleEvaluationFailed
+        expr: rate(prometheus_rule_evaluation_failures_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: monitoring
+        annotations:
+          summary: "Prometheus rule evaluation failures"
+          description: "Prometheus has failed to evaluate rules on {{ $labels.instance }}."
