@@ -224,8 +224,14 @@ curl http://vm-jenkins-dev:8080/job/oversight-mvp/lastBuild/api/json
   - 15-day retention, Thanos for long-term storage
   - Azure & Kubernetes service discovery
   - Federation for multi-region metrics
-- **Grafana**: Dashboard visualization (Story 6.2 - In Progress)
+- **Grafana**: Dashboard visualization (Story 6.2 ✅)
+  - 3-node HA deployment with Azure AD SSO
+  - Pre-built dashboards for infrastructure, application, business metrics
+  - Dashboard as Code with CI/CD automation
+  - Mobile-responsive design
 - **Infrastructure**: All deployed via IaC (Terraform)
+  - 100% test coverage with TDD approach
+  - e2e-* naming convention for all resources
 
 ---
 
