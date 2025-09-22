@@ -1,0 +1,234 @@
+#!/bin/bash
+
+# Commit message hook for SecDevOps CI/CD Pipeline
+# This hook validates commit messages follow conventional commits format
+
+set -e
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_message() {
+    local color=$1
+    local message=$2
+    echo -e "${color}${message}${NC}"
+}
+
+# Get the commit message file
+COMMIT_MSG_FILE=$1
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+print_message "$GREEN" "=================================="
+print_message "$GREEN" "Validating commit message..."
+print_message "$GREEN" "=================================="
+
+# Valid commit types for conventional commits
+VALID_TYPES=(
+    "feat:"
+    "fix:"
+    "docs:"
+    "style:"
+    "refactor:"
+    "perf:"
+    "test:"
+    "build:"
+    "ci:"
+    "chore:"
+    "revert:"
+    "merge:"
+    "release:"
+    "hotfix:"
+)
+
+# Skip validation for merge commits
+if echo "$COMMIT_MSG" | grep -q "^Merge "; then
+    print_message "$GREEN" "✓ Merge commit detected, skipping validation"
+    exit 0
+fi
+
+# Skip validation for revert commits
+if echo "$COMMIT_MSG" | grep -q "^Revert "; then
+    print_message "$GREEN" "✓ Revert commit detected, skipping validation"
+    exit 0
+fi
+
+# Function to validate commit message format
+validate_commit_message() {
+    local msg=$1
+    local valid=0
+    
+    # Check if message starts with a valid type
+    for type in "${VALID_TYPES[@]}"; do
+        if echo "$msg" | grep -q "^$type"; then
+            valid=1
+            break
+        fi
+    done
+    
+    if [ $valid -eq 0 ]; then
+        print_message "$RED" "✗ Invalid commit message format!"
+        print_message "$YELLOW" ""
+        print_message "$YELLOW" "Commit message must follow conventional commits format:"
+        print_message "$YELLOW" "  <type>: <subject>"
+        print_message "$YELLOW" "  "
+        print_message "$YELLOW" "  [optional body]"
+        print_message "$YELLOW" "  "
+        print_message "$YELLOW" "  [optional footer(s)]"
+        print_message "$YELLOW" ""
+        print_message "$YELLOW" "Valid types are:"
+        for type in "${VALID_TYPES[@]}"; do
+            case "$type" in
+                "feat:")
+                    print_message "$YELLOW" "  feat:     A new feature"
+                    ;;
+                "fix:")
+                    print_message "$YELLOW" "  fix:      A bug fix"
+                    ;;
+                "docs:")
+                    print_message "$YELLOW" "  docs:     Documentation changes"
+                    ;;
+                "style:")
+                    print_message "$YELLOW" "  style:    Code style changes (formatting, etc.)"
+                    ;;
+                "refactor:")
+                    print_message "$YELLOW" "  refactor: Code refactoring"
+                    ;;
+                "perf:")
+                    print_message "$YELLOW" "  perf:     Performance improvements"
+                    ;;
+                "test:")
+                    print_message "$YELLOW" "  test:     Adding or updating tests"
+                    ;;
+                "build:")
+                    print_message "$YELLOW" "  build:    Build system changes"
+                    ;;
+                "ci:")
+                    print_message "$YELLOW" "  ci:       CI/CD changes"
+                    ;;
+                "chore:")
+                    print_message "$YELLOW" "  chore:    Maintenance tasks"
+                    ;;
+                "revert:")
+                    print_message "$YELLOW" "  revert:   Reverting changes"
+                    ;;
+                "release:")
+                    print_message "$YELLOW" "  release:  Release preparation"
+                    ;;
+                "hotfix:")
+                    print_message "$YELLOW" "  hotfix:   Critical bug fix"
+                    ;;
+            esac
+        done
+        print_message "$YELLOW" ""
+        print_message "$YELLOW" "Examples:"
+        print_message "$YELLOW" "  feat: add user authentication"
+        print_message "$YELLOW" "  fix: resolve memory leak in parser"
+        print_message "$YELLOW" "  docs: update README with new API endpoints"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Get the first line of the commit message (subject)
+SUBJECT=$(echo "$COMMIT_MSG" | head -n1)
+
+# Validate subject line length (max 50 characters recommended, 72 max)
+SUBJECT_LENGTH=${#SUBJECT}
+
+if [ $SUBJECT_LENGTH -gt 72 ]; then
+    print_message "$RED" "✗ Commit subject line is too long!"
+    print_message "$YELLOW" "  Subject line should be max 72 characters (currently $SUBJECT_LENGTH)"
+    print_message "$YELLOW" "  Recommended: 50 characters or less"
+    exit 1
+elif [ $SUBJECT_LENGTH -gt 50 ]; then
+    print_message "$YELLOW" "⚠ Commit subject line is longer than recommended"
+    print_message "$YELLOW" "  Subject line: $SUBJECT_LENGTH characters (recommended: ≤50)"
+fi
+
+# Validate commit message format
+if ! validate_commit_message "$COMMIT_MSG"; then
+    exit 1
+fi
+
+# Check for scope (optional but recommended)
+if echo "$SUBJECT" | grep -q "^[a-z]+([a-zA-Z0-9-]+):"; then
+    print_message "$GREEN" "✓ Commit scope detected"
+fi
+
+# Check if subject starts with lowercase after type
+TYPE_REGEX="^[a-z]+(\([a-zA-Z0-9-]+\))?:"
+if echo "$SUBJECT" | grep -E "$TYPE_REGEX" > /dev/null; then
+    # Extract the description part after the type
+    DESC=$(echo "$SUBJECT" | sed -E "s/$TYPE_REGEX[[:space:]]*//" )
+    
+    # Check if description starts with lowercase
+    if echo "$DESC" | grep -q "^[a-z]"; then
+        print_message "$GREEN" "✓ Description starts with lowercase"
+    else
+        print_message "$YELLOW" "⚠ Description should start with lowercase"
+    fi
+    
+    # Check if description doesn't end with period
+    if echo "$DESC" | grep -q "\.$"; then
+        print_message "$YELLOW" "⚠ Description should not end with a period"
+    else
+        print_message "$GREEN" "✓ Description format correct"
+    fi
+fi
+
+# Check for body (if present)
+BODY_LINES=$(echo "$COMMIT_MSG" | tail -n +3)
+if [ -n "$BODY_LINES" ]; then
+    # Check for blank line between subject and body
+    SECOND_LINE=$(echo "$COMMIT_MSG" | sed -n '2p')
+    if [ -n "$SECOND_LINE" ]; then
+        print_message "$YELLOW" "⚠ Missing blank line between subject and body"
+    else
+        print_message "$GREEN" "✓ Proper spacing between subject and body"
+    fi
+    
+    # Check body line length (should wrap at 72 characters)
+    while IFS= read -r line; do
+        if [ ${#line} -gt 72 ]; then
+            print_message "$YELLOW" "⚠ Body line exceeds 72 characters: '$(echo "$line" | cut -c1-50)...'"
+        fi
+    done <<< "$BODY_LINES"
+fi
+
+# Check for issue references (e.g., #123, JIRA-123)
+if echo "$COMMIT_MSG" | grep -E "(#[0-9]+|[A-Z]+-[0-9]+)" > /dev/null; then
+    print_message "$GREEN" "✓ Issue reference detected"
+fi
+
+# Check for breaking changes
+if echo "$COMMIT_MSG" | grep -i "BREAKING CHANGE:" > /dev/null; then
+    print_message "$YELLOW" "⚠ BREAKING CHANGE detected - ensure this is documented"
+fi
+
+# Check for signed-off-by (if required)
+if [ -n "$REQUIRE_SIGN_OFF" ]; then
+    if echo "$COMMIT_MSG" | grep -q "^Signed-off-by:"; then
+        print_message "$GREEN" "✓ Signed-off-by present"
+    else
+        print_message "$RED" "✗ Missing Signed-off-by"
+        print_message "$YELLOW" "  Add: Signed-off-by: Your Name <your.email@example.com>"
+        exit 1
+    fi
+fi
+
+# Check for co-authors
+if echo "$COMMIT_MSG" | grep -q "^Co-authored-by:"; then
+    print_message "$GREEN" "✓ Co-author(s) detected"
+fi
+
+# Final validation
+print_message "$GREEN" "=================================="
+print_message "$GREEN" "✓ Commit message validation PASSED"
+print_message "$GREEN" "=================================="
+
+exit 0

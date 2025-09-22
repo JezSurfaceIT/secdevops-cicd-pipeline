@@ -1,0 +1,167 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+        description: This hook trims trailing whitespace
+      - id: end-of-file-fixer
+        name: Fix end of files
+        description: Ensures that a file is either empty or ends with one newline
+      - id: check-yaml
+        name: Check YAML syntax
+        description: This hook checks yaml files for parseable syntax
+        args: ['--unsafe']
+      - id: check-json
+        name: Check JSON syntax
+        description: This hook checks json files for parseable syntax
+      - id: check-added-large-files
+        name: Check for large files
+        description: Prevent large files from being committed
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+        description: Check for files that contain merge conflict strings
+      - id: check-case-conflict
+        name: Check for case conflicts
+        description: Check for files that would conflict in case-insensitive filesystems
+      - id: detect-private-key
+        name: Detect private keys
+        description: Detects presence of private keys
+      - id: mixed-line-ending
+        name: Fix mixed line endings
+        description: Checks for mixed line endings
+        args: ['--fix=lf']
+      - id: check-symlinks
+        name: Check for broken symlinks
+        description: Checks for symlinks which do not point to anything
+      - id: check-executables-have-shebangs
+        name: Check executables have shebangs
+        description: Ensures that executables have shebangs
+      - id: check-shebang-scripts-are-executable
+        name: Check scripts with shebangs are executable
+        description: Ensures that scripts with shebangs are executable
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.83.5
+    hooks:
+      - id: terraform_fmt
+        name: Terraform format
+        description: Rewrites all Terraform configuration files to canonical format
+      - id: terraform_validate
+        name: Terraform validate
+        description: Validates all Terraform configuration files
+      - id: terraform_docs
+        name: Terraform docs
+        description: Inserts input and output documentation into README.md
+        args:
+          - --hook-config=--path-to-file=README.md
+          - --hook-config=--add-to-existing-file=true
+          - --hook-config=--create-file-if-not-exist=true
+      - id: terraform_tflint
+        name: Terraform TFLint
+        description: Validates all Terraform configuration files with TFLint
+        args:
+          - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
+      - id: terraform_checkov
+        name: Checkov security scan
+        description: Runs checkov security scanning on Terraform files
+        args:
+          - --args=--quiet
+          - --args=--skip-check CKV_AZURE_88,CKV_AZURE_71
+
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        name: Black Python formatter
+        description: Format Python code with Black
+        language_version: python3
+        args: ['--line-length=100']
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        name: Flake8 Python linter
+        description: Lint Python code with Flake8
+        args: ['--max-line-length=100', '--ignore=E203,W503']
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: isort Python import sorter
+        description: Sort Python imports with isort
+        args: ['--profile', 'black', '--line-length', '100']
+
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        name: Hadolint Dockerfile linter
+        description: Lint Dockerfiles with hadolint
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        name: Shellcheck
+        description: Shell script static analysis tool
+
+  - repo: https://github.com/markdownlint/markdownlint
+    rev: v0.13.0
+    hooks:
+      - id: markdownlint
+        name: Markdownlint
+        description: Lint markdown files
+        args: ['--rules', '~MD013,~MD033']
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.1
+    hooks:
+      - id: gitleaks
+        name: Gitleaks secret scanning
+        description: Detect hardcoded secrets
+
+  - repo: local
+    hooks:
+      - id: no-commit-to-branch
+        name: Prevent commits to protected branches
+        entry: bash -c 'if [[ "$PRE_COMMIT_FROM_REF" == "refs/heads/main" || "$PRE_COMMIT_FROM_REF" == "refs/heads/master" || "$PRE_COMMIT_FROM_REF" == "refs/heads/develop" ]]; then echo "Direct commits to protected branches are not allowed. Please create a feature branch."; exit 1; fi; exit 0;'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [commit]
+      
+      - id: pytest-check
+        name: Run pytest
+        entry: bash -c 'cd /home/jez/code/SecDevOps_CICD/SecDevOps_CICD && source venv/bin/activate && python -m pytest tests/unit/ -v --tb=short || exit 1'
+        language: system
+        files: \.py$
+        pass_filenames: false
+        stages: [commit]
+      
+      - id: conventional-commit-msg
+        name: Check conventional commit message
+        entry: scripts/git-hooks/commit-msg
+        language: system
+        stages: [commit-msg]
+        pass_filenames: true
+      
+      - id: terraform-security-scan
+        name: Terraform security scanning
+        entry: bash -c 'if [ -f terraform/ ]; then echo "Running Terraform security scan..."; fi'
+        language: system
+        files: \.tf$
+        stages: [push]
+        pass_filenames: false
+
+default_language_version:
+  python: python3
+
+ci:
+  autofix_prs: true
+  autoupdate_commit_msg: 'chore: pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: [terraform_docs, terraform_tflint, terraform_checkov]

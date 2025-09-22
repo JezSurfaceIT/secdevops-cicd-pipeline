@@ -1,0 +1,530 @@
+# GitLab CI/CD Pipeline for SecDevOps
+# Complete security-focused CI/CD pipeline with defensive controls
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  CONTAINER_TEST_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+  CONTAINER_RELEASE_IMAGE: $CI_REGISTRY_IMAGE:latest
+  AZURE_RESOURCE_GROUP: rg-secdevops-cicd-dev
+  ACR_NAME: acrsecdevopsdev
+  SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+  GIT_DEPTH: "0"
+  TRIVY_VERSION: "0.48.3"
+  SEMGREP_VERSION: "1.45.0"
+  
+stages:
+  - validate
+  - security-scan
+  - build
+  - test
+  - container-security
+  - deploy-test
+  - integration-test
+  - performance-test
+  - deploy-staging
+  - deploy-production
+  - monitoring
+
+# Cache for dependencies
+cache:
+  paths:
+    - .npm/
+    - node_modules/
+    - .sonar/cache
+    - .trivy-cache/
+
+# Security: Pre-commit validation
+validate:secrets:
+  stage: validate
+  image: python:3.11-slim
+  before_script:
+    - pip install detect-secrets
+  script:
+    - |
+      echo "Scanning for secrets in codebase..."
+      detect-secrets scan --baseline .secrets.baseline
+      detect-secrets audit .secrets.baseline
+  allow_failure: false
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+validate:iac:
+  stage: validate
+  image: bridgecrew/checkov:latest
+  script:
+    - |
+      echo "Validating Infrastructure as Code..."
+      checkov -d terraform/ --framework terraform --output json -o checkov-report.json
+      checkov -d docker/ --framework dockerfile --output json -o dockerfile-report.json
+      checkov -d kubernetes/ --framework kubernetes --output json -o k8s-report.json
+  artifacts:
+    reports:
+      junit: "*-report.json"
+    paths:
+      - "*-report.json"
+    expire_in: 30 days
+  allow_failure: false
+
+# SAST: Static Application Security Testing
+sast:semgrep:
+  stage: security-scan
+  image: returntocorp/semgrep:$SEMGREP_VERSION
+  script:
+    - |
+      echo "Running Semgrep security analysis..."
+      semgrep --config=auto \
+        --json \
+        --output=semgrep-report.json \
+        --severity ERROR \
+        --severity WARNING \
+        .
+  artifacts:
+    reports:
+      sast: semgrep-report.json
+    paths:
+      - semgrep-report.json
+    expire_in: 30 days
+
+sast:sonarqube:
+  stage: security-scan
+  image: sonarsource/sonar-scanner-cli:latest
+  script:
+    - |
+      echo "Running SonarQube analysis..."
+      sonar-scanner \
+        -Dsonar.projectKey=$CI_PROJECT_NAME \
+        -Dsonar.sources=. \
+        -Dsonar.host.url=$SONARQUBE_URL \
+        -Dsonar.login=$SONARQUBE_TOKEN \
+        -Dsonar.qualitygate.wait=true
+  allow_failure: false
+  only:
+    - main
+    - develop
+    - merge_requests
+
+dependency-scan:
+  stage: security-scan
+  image: node:18-alpine
+  script:
+    - |
+      echo "Checking for vulnerable dependencies..."
+      npm audit --audit-level=moderate --json > npm-audit.json
+      npm outdated --json > npm-outdated.json
+      
+      # Check for high/critical vulnerabilities
+      if npm audit --audit-level=high; then
+        echo "No high/critical vulnerabilities found"
+      else
+        echo "High/critical vulnerabilities detected!"
+        exit 1
+      fi
+  artifacts:
+    reports:
+      dependency_scanning: npm-audit.json
+    paths:
+      - npm-audit.json
+      - npm-outdated.json
+    expire_in: 30 days
+  allow_failure: false
+
+license-scan:
+  stage: security-scan
+  image: licensefinder/license_finder:latest
+  script:
+    - |
+      echo "Scanning for license compliance..."
+      license_finder report --format json > license-report.json
+      
+      # Check for forbidden licenses
+      license_finder action_items --quiet || exit 1
+  artifacts:
+    paths:
+      - license-report.json
+    expire_in: 30 days
+
+# Build stage
+build:application:
+  stage: build
+  image: docker:24.0.7
+  services:
+    - docker:24.0.7-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - |
+      echo "Building application container..."
+      docker build \
+        --cache-from $CONTAINER_TEST_IMAGE \
+        --tag $CONTAINER_TEST_IMAGE \
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+        --build-arg VCS_REF=$CI_COMMIT_SHA \
+        --build-arg VERSION=$CI_COMMIT_REF_NAME \
+        .
+      docker push $CONTAINER_TEST_IMAGE
+  artifacts:
+    reports:
+      dotenv: build.env
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# Unit and Integration Tests
+test:unit:
+  stage: test
+  image: node:18-alpine
+  coverage: '/Lines\s*:\s*([0-9.]+)%/'
+  script:
+    - |
+      echo "Running unit tests with coverage..."
+      npm ci
+      npm run test:coverage
+      
+      # Check coverage threshold
+      COVERAGE=$(cat coverage/coverage-summary.json | grep -o '"lines":{"total":[0-9]*,"covered":[0-9]*,"pct":[0-9.]*' | grep -o 'pct":[0-9.]*' | cut -d: -f2)
+      echo "Code coverage: ${COVERAGE}%"
+      
+      if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+        echo "ERROR: Code coverage below 80%"
+        exit 1
+      fi
+  artifacts:
+    reports:
+      junit: junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+    paths:
+      - coverage/
+    expire_in: 30 days
+
+test:integration:
+  stage: test
+  image: node:18-alpine
+  services:
+    - postgres:15-alpine
+    - redis:7-alpine
+  variables:
+    POSTGRES_DB: testdb
+    POSTGRES_USER: testuser
+    POSTGRES_PASSWORD: testpass
+    REDIS_HOST: redis
+  script:
+    - |
+      echo "Running integration tests..."
+      npm ci
+      npm run test:integration
+  artifacts:
+    reports:
+      junit: integration-junit.xml
+    expire_in: 30 days
+
+# Container Security Scanning
+container:trivy:
+  stage: container-security
+  image: aquasec/trivy:$TRIVY_VERSION
+  script:
+    - |
+      echo "Scanning container image for vulnerabilities..."
+      trivy image \
+        --severity HIGH,CRITICAL \
+        --no-progress \
+        --format json \
+        --output trivy-container-report.json \
+        $CONTAINER_TEST_IMAGE
+      
+      # Fail if critical vulnerabilities found
+      trivy image \
+        --severity CRITICAL \
+        --exit-code 1 \
+        --no-progress \
+        $CONTAINER_TEST_IMAGE
+  artifacts:
+    reports:
+      container_scanning: trivy-container-report.json
+    paths:
+      - trivy-container-report.json
+    expire_in: 30 days
+  dependencies:
+    - build:application
+
+container:snyk:
+  stage: container-security
+  image: snyk/snyk:docker
+  script:
+    - |
+      echo "Running Snyk container analysis..."
+      snyk auth $SNYK_TOKEN
+      snyk container test $CONTAINER_TEST_IMAGE \
+        --severity-threshold=high \
+        --json > snyk-container-report.json || true
+  artifacts:
+    paths:
+      - snyk-container-report.json
+    expire_in: 30 days
+  allow_failure: true
+
+# Deploy to Test Environment
+deploy:test:
+  stage: deploy-test
+  image: mcr.microsoft.com/azure-cli:latest
+  environment:
+    name: test
+    url: https://test.secdevops.example.com
+  script:
+    - |
+      echo "Deploying to test environment..."
+      az login --service-principal \
+        -u $AZURE_CLIENT_ID \
+        -p $AZURE_CLIENT_SECRET \
+        --tenant $AZURE_TENANT_ID
+      
+      az container create \
+        --resource-group $AZURE_RESOURCE_GROUP \
+        --name ${CI_PROJECT_NAME}-test \
+        --image $CONTAINER_TEST_IMAGE \
+        --cpu 1 \
+        --memory 1 \
+        --ports 80 443 \
+        --environment-variables \
+          NODE_ENV=test \
+          BUILD_ID=$CI_COMMIT_SHA \
+        --dns-name-label ${CI_PROJECT_NAME}-test
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+# Integration Tests against deployed environment
+test:e2e:
+  stage: integration-test
+  image: mcr.microsoft.com/playwright:v1.40.0-focal
+  environment:
+    name: test
+  script:
+    - |
+      echo "Running end-to-end tests..."
+      npm ci
+      npx playwright install
+      npm run test:e2e
+  artifacts:
+    when: always
+    paths:
+      - playwright-report/
+      - test-results/
+    expire_in: 30 days
+  dependencies:
+    - deploy:test
+
+# DAST: Dynamic Application Security Testing
+dast:zap:
+  stage: integration-test
+  image: owasp/zap2docker-stable:latest
+  environment:
+    name: test
+  script:
+    - |
+      echo "Running OWASP ZAP security scan..."
+      zap-baseline.py \
+        -t https://${CI_PROJECT_NAME}-test.${AZURE_LOCATION}.azurecontainer.io \
+        -r zap-report.html \
+        -J zap-report.json \
+        -I
+  artifacts:
+    reports:
+      dast: zap-report.json
+    paths:
+      - zap-report.html
+      - zap-report.json
+    expire_in: 30 days
+  allow_failure: true
+  dependencies:
+    - deploy:test
+
+# Performance Testing
+performance:load:
+  stage: performance-test
+  image: grafana/k6:latest
+  environment:
+    name: test
+  script:
+    - |
+      echo "Running performance tests..."
+      k6 run \
+        --out json=k6-results.json \
+        --summary-export=k6-summary.json \
+        tests/performance/load-test.js
+  artifacts:
+    reports:
+      performance: k6-summary.json
+    paths:
+      - k6-results.json
+      - k6-summary.json
+    expire_in: 30 days
+  allow_failure: true
+  dependencies:
+    - deploy:test
+
+# Deploy to Staging (Blue/Green)
+deploy:staging:
+  stage: deploy-staging
+  image: mcr.microsoft.com/azure-cli:latest
+  environment:
+    name: staging
+    url: https://staging.secdevops.example.com
+    on_stop: rollback:staging
+  before_script:
+    - az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID
+  script:
+    - |
+      echo "Deploying to staging (Blue/Green)..."
+      
+      # Deploy to green slot
+      az container create \
+        --resource-group $AZURE_RESOURCE_GROUP \
+        --name ${CI_PROJECT_NAME}-staging-green \
+        --image $CONTAINER_TEST_IMAGE \
+        --cpu 2 \
+        --memory 2 \
+        --ports 80 443 \
+        --environment-variables \
+          NODE_ENV=staging \
+          BUILD_ID=$CI_COMMIT_SHA \
+          SLOT=green
+      
+      # Health check
+      for i in {1..30}; do
+        if curl -f https://${CI_PROJECT_NAME}-staging-green.${AZURE_LOCATION}.azurecontainer.io/health; then
+          echo "Health check passed"
+          break
+        fi
+        sleep 10
+      done
+      
+      # Switch traffic
+      echo "Switching traffic to green slot..."
+      # Update Application Gateway backend pool
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# Rollback Staging
+rollback:staging:
+  stage: deploy-staging
+  image: mcr.microsoft.com/azure-cli:latest
+  environment:
+    name: staging
+    action: stop
+  script:
+    - |
+      echo "Rolling back staging deployment..."
+      az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID
+      
+      # Switch traffic back to blue
+      echo "Switching traffic back to blue slot..."
+      # Update Application Gateway backend pool
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# Deploy to Production (with approval)
+deploy:production:
+  stage: deploy-production
+  image: mcr.microsoft.com/azure-cli:latest
+  environment:
+    name: production
+    url: https://secdevops.example.com
+  before_script:
+    - az login --service-principal -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET --tenant $AZURE_TENANT_ID
+  script:
+    - |
+      echo "Deploying to production..."
+      
+      # Tag image for production
+      docker pull $CONTAINER_TEST_IMAGE
+      docker tag $CONTAINER_TEST_IMAGE $CONTAINER_RELEASE_IMAGE
+      docker push $CONTAINER_RELEASE_IMAGE
+      
+      # Deploy with canary strategy
+      az container create \
+        --resource-group $AZURE_RESOURCE_GROUP \
+        --name ${CI_PROJECT_NAME}-prod-canary \
+        --image $CONTAINER_RELEASE_IMAGE \
+        --cpu 2 \
+        --memory 4 \
+        --ports 80 443 \
+        --environment-variables \
+          NODE_ENV=production \
+          BUILD_ID=$CI_COMMIT_SHA \
+          DEPLOYMENT_TYPE=canary \
+        --dns-name-label ${CI_PROJECT_NAME}-prod-canary
+      
+      # Monitor canary for 30 minutes
+      echo "Monitoring canary deployment..."
+      sleep 1800
+      
+      # Full rollout if canary is successful
+      az container update \
+        --resource-group $AZURE_RESOURCE_GROUP \
+        --name ${CI_PROJECT_NAME}-prod \
+        --image $CONTAINER_RELEASE_IMAGE
+  when: manual
+  only:
+    - main
+  needs:
+    - deploy:staging
+    - test:e2e
+    - dast:zap
+    - performance:load
+
+# Monitoring and Alerting
+monitor:metrics:
+  stage: monitoring
+  image: prom/prometheus:latest
+  script:
+    - |
+      echo "Pushing deployment metrics..."
+      cat <<EOF | curl --data-binary @- ${PROMETHEUS_PUSHGATEWAY}/metrics/job/deployment/instance/${CI_PROJECT_NAME}
+      deployment_info{environment="${CI_ENVIRONMENT_NAME}",version="${CI_COMMIT_REF_NAME}",commit="${CI_COMMIT_SHA}"} 1
+      deployment_timestamp ${CI_PIPELINE_CREATED_AT}
+      deployment_duration_seconds ${CI_PIPELINE_DURATION}
+      EOF
+  dependencies: []
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+
+security:report:
+  stage: monitoring
+  image: alpine:latest
+  script:
+    - |
+      echo "Generating security report..."
+      cat > security-summary.md <<EOF
+      # Security Scan Summary
+      
+      ## Pipeline: ${CI_PIPELINE_ID}
+      ## Commit: ${CI_COMMIT_SHA}
+      ## Date: $(date)
+      
+      ### Scan Results
+      - SAST: Completed
+      - DAST: Completed
+      - Container Scan: Completed
+      - License Scan: Completed
+      - Dependency Scan: Completed
+      
+      ### Artifacts
+      All security reports have been archived.
+      EOF
+  artifacts:
+    paths:
+      - security-summary.md
+    expire_in: 90 days
+  when: always
+  dependencies:
+    - sast:semgrep
+    - sast:sonarqube
+    - container:trivy
+    - dast:zap

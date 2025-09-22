@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: owasp-zap
+    command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true -config api.key=${ZAP_API_KEY:-secdevops-api-key}
+    ports:
+      - "8080:8080"
+      - "8090:8090"  # ZAP proxy port
+    volumes:
+      - ./zap/sessions:/zap/wrk/sessions:rw
+      - ./zap/policies:/zap/wrk/policies:rw
+      - ./zap/reports:/zap/wrk/reports:rw
+      - ./zap/scripts:/zap/wrk/scripts:rw
+    networks:
+      - secdevops
+    environment:
+      - ZAP_PORT=8080
+      - ZAP_API_KEY=${ZAP_API_KEY:-secdevops-api-key}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/JSON/core/view/version/?apikey=${ZAP_API_KEY:-secdevops-api-key}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  zap-webui:
+    image: ghcr.io/zaproxy/zaproxy:stable  
+    container_name: zap-webui
+    command: zap-webswing.sh
+    ports:
+      - "8081:8080"
+      - "8091:8090"
+    volumes:
+      - ./zap/sessions:/zap/wrk/sessions:rw
+      - ./zap/policies:/zap/wrk/policies:rw
+      - ./zap/reports:/zap/wrk/reports:rw
+    networks:
+      - secdevops
+    environment:
+      - ZAP_WEBSWING=true
+    profiles:
+      - webui
+
+networks:
+  secdevops:
+    external: true
+    name: secdevops-network

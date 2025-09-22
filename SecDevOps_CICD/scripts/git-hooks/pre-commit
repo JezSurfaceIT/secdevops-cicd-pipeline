@@ -1,0 +1,277 @@
+#!/bin/bash
+
+# Pre-commit hook for SecDevOps CI/CD Pipeline
+# This hook runs before each commit to ensure code quality and security
+
+set -e
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_message() {
+    local color=$1
+    local message=$2
+    echo -e "${color}${message}${NC}"
+}
+
+print_message "$GREEN" "=================================="
+print_message "$GREEN" "Running pre-commit checks..."
+print_message "$GREEN" "=================================="
+
+# Get the root directory of the git repository
+GIT_ROOT=$(git rev-parse --show-toplevel)
+cd "$GIT_ROOT"
+
+# Track if any checks fail
+FAILED=0
+
+# 1. Check for secrets and credentials
+print_message "$YELLOW" "→ Checking for secrets and credentials..."
+
+# Patterns to check for potential secrets
+SECRET_PATTERNS=(
+    "AWS_SECRET"
+    "AWS_ACCESS_KEY"
+    "API_KEY"
+    "api_key"
+    "apikey"
+    "private_key"
+    "Private Key"
+    "BEGIN RSA"
+    "BEGIN DSA"
+    "BEGIN EC"
+    "BEGIN OPENSSH"
+    "password="
+    "password:"
+    "pwd="
+    "passwd="
+    "token="
+    "Token:"
+    "bearer"
+    "Bearer"
+    "client_secret"
+    "client_id"
+)
+
+# Check staged files for secrets
+for pattern in "${SECRET_PATTERNS[@]}"; do
+    if git diff --cached --name-only | xargs -I {} git diff --cached {} | grep -i "$pattern" > /dev/null 2>&1; then
+        print_message "$RED" "✗ Potential secret detected: $pattern"
+        print_message "$RED" "  Please remove sensitive information before committing"
+        FAILED=1
+    fi
+done
+
+if [ $FAILED -eq 0 ]; then
+    print_message "$GREEN" "✓ No secrets detected"
+fi
+
+# 2. Check for large files
+print_message "$YELLOW" "→ Checking for large files..."
+
+# Maximum file size in bytes (5MB)
+MAX_SIZE=5242880
+
+# Check staged files for size
+for file in $(git diff --cached --name-only); do
+    if [ -f "$file" ]; then
+        file_size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
+        if [ "$file_size" -gt "$MAX_SIZE" ]; then
+            print_message "$RED" "✗ Large file detected: $file ($(($file_size / 1024 / 1024))MB)"
+            print_message "$RED" "  Maximum file size is 5MB"
+            FAILED=1
+        fi
+    fi
+done
+
+if [ $FAILED -eq 0 ]; then
+    print_message "$GREEN" "✓ No large files detected"
+fi
+
+# 3. Python linting and formatting
+print_message "$YELLOW" "→ Checking Python code..."
+
+# Check if there are Python files staged
+if git diff --cached --name-only | grep -E '\.py$' > /dev/null; then
+    # Check if virtual environment exists and activate it
+    if [ -d "venv" ]; then
+        source venv/bin/activate
+    fi
+    
+    # Run black formatting check (if available)
+    if command -v black &> /dev/null; then
+        if ! git diff --cached --name-only | grep -E '\.py$' | xargs black --check --quiet 2>/dev/null; then
+            print_message "$RED" "✗ Python formatting issues detected"
+            print_message "$YELLOW" "  Run 'black .' to fix formatting"
+            FAILED=1
+        else
+            print_message "$GREEN" "✓ Python formatting OK"
+        fi
+    fi
+    
+    # Run flake8 linting (if available)
+    if command -v flake8 &> /dev/null; then
+        if ! git diff --cached --name-only | grep -E '\.py$' | xargs flake8 --max-line-length=100 2>/dev/null; then
+            print_message "$RED" "✗ Python linting issues detected"
+            FAILED=1
+        else
+            print_message "$GREEN" "✓ Python linting OK"
+        fi
+    fi
+else
+    print_message "$GREEN" "✓ No Python files to check"
+fi
+
+# 4. Terraform validation
+print_message "$YELLOW" "→ Checking Terraform files..."
+
+# Check if there are Terraform files staged
+if git diff --cached --name-only | grep -E '\.tf$' > /dev/null; then
+    if command -v terraform &> /dev/null; then
+        # Check terraform fmt
+        for dir in $(git diff --cached --name-only | grep -E '\.tf$' | xargs dirname | sort -u); do
+            if [ -d "$dir" ]; then
+                if ! terraform fmt -check "$dir" > /dev/null 2>&1; then
+                    print_message "$RED" "✗ Terraform formatting issues in $dir"
+                    print_message "$YELLOW" "  Run 'terraform fmt' to fix formatting"
+                    FAILED=1
+                fi
+                
+                # Only validate if .terraform directory exists
+                if [ -d "$dir/.terraform" ]; then
+                    if ! terraform validate "$dir" > /dev/null 2>&1; then
+                        print_message "$RED" "✗ Terraform validation failed in $dir"
+                        FAILED=1
+                    fi
+                fi
+            fi
+        done
+        
+        if [ $FAILED -eq 0 ]; then
+            print_message "$GREEN" "✓ Terraform files OK"
+        fi
+    else
+        print_message "$YELLOW" "⚠ Terraform not installed, skipping validation"
+    fi
+else
+    print_message "$GREEN" "✓ No Terraform files to check"
+fi
+
+# 5. Shell script validation
+print_message "$YELLOW" "→ Checking shell scripts..."
+
+# Check if there are shell scripts staged
+if git diff --cached --name-only | grep -E '\.(sh|bash)$' > /dev/null; then
+    if command -v shellcheck &> /dev/null; then
+        if ! git diff --cached --name-only | grep -E '\.(sh|bash)$' | xargs shellcheck -S error 2>/dev/null; then
+            print_message "$RED" "✗ Shell script issues detected"
+            FAILED=1
+        else
+            print_message "$GREEN" "✓ Shell scripts OK"
+        fi
+    else
+        print_message "$YELLOW" "⚠ Shellcheck not installed, skipping validation"
+    fi
+else
+    print_message "$GREEN" "✓ No shell scripts to check"
+fi
+
+# 6. YAML validation
+print_message "$YELLOW" "→ Checking YAML files..."
+
+# Check if there are YAML files staged
+if git diff --cached --name-only | grep -E '\.(yml|yaml)$' > /dev/null; then
+    # Simple YAML syntax check using Python
+    if command -v python3 &> /dev/null; then
+        for file in $(git diff --cached --name-only | grep -E '\.(yml|yaml)$'); do
+            if [ -f "$file" ]; then
+                if ! python3 -c "import yaml; yaml.safe_load(open('$file'))" 2>/dev/null; then
+                    print_message "$RED" "✗ YAML syntax error in $file"
+                    FAILED=1
+                fi
+            fi
+        done
+        
+        if [ $FAILED -eq 0 ]; then
+            print_message "$GREEN" "✓ YAML files OK"
+        fi
+    else
+        print_message "$YELLOW" "⚠ Python not available, skipping YAML validation"
+    fi
+else
+    print_message "$GREEN" "✓ No YAML files to check"
+fi
+
+# 7. JSON validation
+print_message "$YELLOW" "→ Checking JSON files..."
+
+# Check if there are JSON files staged
+if git diff --cached --name-only | grep -E '\.json$' > /dev/null; then
+    for file in $(git diff --cached --name-only | grep -E '\.json$'); do
+        if [ -f "$file" ]; then
+            if ! python3 -c "import json; json.load(open('$file'))" 2>/dev/null; then
+                print_message "$RED" "✗ JSON syntax error in $file"
+                FAILED=1
+            fi
+        fi
+    done
+    
+    if [ $FAILED -eq 0 ]; then
+        print_message "$GREEN" "✓ JSON files OK"
+    fi
+else
+    print_message "$GREEN" "✓ No JSON files to check"
+fi
+
+# 8. Check for debugging code
+print_message "$YELLOW" "→ Checking for debugging code..."
+
+DEBUG_PATTERNS=(
+    "console.log"
+    "print("
+    "debugger"
+    "TODO"
+    "FIXME"
+    "XXX"
+    "HACK"
+)
+
+for pattern in "${DEBUG_PATTERNS[@]}"; do
+    if git diff --cached --name-only | xargs -I {} git diff --cached {} | grep "$pattern" > /dev/null 2>&1; then
+        print_message "$YELLOW" "⚠ Debug/TODO marker found: $pattern"
+    fi
+done
+
+# 9. Run unit tests (if in CI/CD context)
+if [ -n "$CI" ] || [ -n "$RUN_TESTS" ]; then
+    print_message "$YELLOW" "→ Running unit tests..."
+    
+    if [ -d "venv" ]; then
+        source venv/bin/activate
+    fi
+    
+    if command -v pytest &> /dev/null; then
+        if ! pytest tests/unit/ -q --tb=short; then
+            print_message "$RED" "✗ Unit tests failed"
+            FAILED=1
+        else
+            print_message "$GREEN" "✓ Unit tests passed"
+        fi
+    fi
+fi
+
+# Final result
+print_message "$GREEN" "=================================="
+
+if [ $FAILED -ne 0 ]; then
+    print_message "$RED" "Pre-commit checks FAILED"
+    print_message "$RED" "Please fix the issues above and try again"
+    exit 1
+else
+    print_message "$GREEN" "All pre-commit checks PASSED"
+    exit 0
+fi

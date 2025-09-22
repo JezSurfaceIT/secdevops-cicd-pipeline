@@ -1,0 +1,43 @@
+# GitHub CODEOWNERS File
+# This file defines the code ownership for the SecDevOps CI/CD repository
+# Owners will be automatically requested for review on pull requests
+
+# Default owners for everything
+* @devops-team
+
+# Infrastructure
+/terraform/ @infrastructure-team @devops-lead
+/terraform/modules/networking/ @network-team @infrastructure-team
+/terraform/modules/jenkins-vm/ @infrastructure-team @security-team
+/terraform/modules/acr/ @infrastructure-team @container-team
+
+# CI/CD
+/.github/ @devops-team @cicd-lead
+/.github/workflows/ @devops-team @automation-team
+/Jenkinsfile @devops-team @cicd-lead
+
+# Security
+/scripts/security/ @security-team @devops-lead
+/.pre-commit-config.yaml @security-team @devops-team
+**/security*.* @security-team
+
+# Scripts and Automation
+/scripts/ @devops-team @automation-team
+/scripts/setup/ @infrastructure-team @devops-team
+/scripts/validation/ @qa-team @devops-team
+
+# Documentation
+/docs/ @devops-team @technical-writers
+*.md @technical-writers
+README.md @devops-lead @technical-writers
+
+# Testing
+/tests/ @qa-team @devops-team
+/tests/unit/ @development-team @qa-team
+/tests/integration/ @qa-team @devops-team
+pytest.ini @qa-team @development-team
+
+# Configuration Files
+Makefile @devops-team @devops-lead
+requirements*.txt @development-team @devops-team
+.gitignore @devops-team

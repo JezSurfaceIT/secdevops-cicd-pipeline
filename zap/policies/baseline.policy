@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<configuration>
+    <policy>SecDevOps Baseline Scan</policy>
+    <scanner>
+        <level>MEDIUM</level>
+        <strength>MEDIUM</strength>
+    </scanner>
+    <plugins>
+        <!-- SQL Injection -->
+        <plugin>
+            <id>40018</id>
+            <enabled>true</enabled>
+            <level>MEDIUM</level>
+            <strength>HIGH</strength>
+        </plugin>
+        <!-- Cross Site Scripting -->
+        <plugin>
+            <id>40012</id>
+            <enabled>true</enabled>
+            <level>MEDIUM</level>
+            <strength>HIGH</strength>
+        </plugin>
+        <!-- Path Traversal -->
+        <plugin>
+            <id>6</id>
+            <enabled>true</enabled>
+            <level>MEDIUM</level>
+            <strength>MEDIUM</strength>
+        </plugin>
+        <!-- Remote File Inclusion -->
+        <plugin>
+            <id>7</id>
+            <enabled>true</enabled>
+            <level>MEDIUM</level>
+            <strength>MEDIUM</strength>
+        </plugin>
+        <!-- Server Side Include -->
+        <plugin>
+            <id>40009</id>
+            <enabled>true</enabled>
+            <level>MEDIUM</level>
+            <strength>MEDIUM</strength>
+        </plugin>
+        <!-- Command Injection -->
+        <plugin>
+            <id>90020</id>
+            <enabled>true</enabled>
+            <level>MEDIUM</level>
+            <strength>MEDIUM</strength>
+        </plugin>
+        <!-- LDAP Injection -->
+        <plugin>
+            <id>40031</id>
+            <enabled>true</enabled>
+            <level>MEDIUM</level>
+            <strength>MEDIUM</strength>
+        </plugin>
+        <!-- XXE -->
+        <plugin>
+            <id>90023</id>
+            <enabled>true</enabled>
+            <level>MEDIUM</level>
+            <strength>MEDIUM</strength>
+        </plugin>
+        <!-- Buffer Overflow -->
+        <plugin>
+            <id>30001</id>
+            <enabled>false</enabled>
+            <level>MEDIUM</level>
+            <strength>MEDIUM</strength>
+        </plugin>
+        <!-- Format String Error -->
+        <plugin>
+            <id>30002</id>
+            <enabled>false</enabled>
+            <level>MEDIUM</level>
+            <strength>MEDIUM</strength>
+        </plugin>
+    </plugins>
+</configuration>

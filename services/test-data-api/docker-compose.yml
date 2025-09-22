@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  test-data-api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: test-data-api
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=${DB_HOST:-10.40.1.20}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-oversight_test}
+      - DB_USER=${DB_USER:-testadmin}
+      - DB_PASSWORD=${DB_PASSWORD:-TestPassword123!}
+      - DEBUG=${DEBUG:-false}
+    volumes:
+      - ./app.py:/app/app.py:ro
+      - ../../sql/states:/app/sql/states:ro
+      - ./backups:/app/backups
+    networks:
+      - secdevops
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  secdevops:
+    external: true
+    name: secdevops-network

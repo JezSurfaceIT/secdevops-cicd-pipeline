@@ -1,0 +1,10 @@
+pytest==7.4.0
+pytest-cov==4.1.0
+pytest-mock==3.11.1
+pytest-terraform==0.6.0
+azure-mgmt-network==23.0.0
+azure-mgmt-resource==23.0.0
+azure-identity==1.14.0
+black==23.7.0
+flake8==6.0.0
+pylint==2.17.4

@@ -1,0 +1,464 @@
+@Library('secdevops-pipeline-library') _
+
+pipeline {
+    agent any
+    
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        timeout(time: 2, unit: 'HOURS')
+        timestamps()
+        ansiColor('xterm')
+        parallelsAlwaysFailFast()
+    }
+    
+    parameters {
+        choice(name: 'ENVIRONMENT', choices: ['dev', 'test', 'staging', 'prod'], description: 'Target environment')
+        booleanParam(name: 'RUN_SECURITY_SCAN', defaultValue: true, description: 'Run security scans')
+        booleanParam(name: 'RUN_INTEGRATION_TESTS', defaultValue: true, description: 'Run integration tests')
+        booleanParam(name: 'DEPLOY', defaultValue: true, description: 'Deploy to environment')
+        string(name: 'VERSION_TAG', defaultValue: '', description: 'Optional version tag')
+    }
+    
+    environment {
+        // Azure Configuration
+        AZURE_SUBSCRIPTION_ID = credentials('azure-subscription-id')
+        AZURE_RESOURCE_GROUP = "rg-secdevops-cicd-${params.ENVIRONMENT}"
+        ACR_REGISTRY = 'acrsecdevopsdev.azurecr.io'
+        
+        // GitHub Configuration
+        GITHUB_TOKEN = credentials('github-token')
+        GITHUB_REPO = 'organization/oversight-mvp'
+        
+        // Security Tools Tokens
+        SONARQUBE_TOKEN = credentials('sonarqube-token')
+        SNYK_TOKEN = credentials('snyk-token')
+        
+        // Build Configuration
+        BUILD_IMAGE = "${ACR_REGISTRY}/oversight:${BUILD_NUMBER}-${GIT_COMMIT_SHORT}"
+        NODE_ENV = "${params.ENVIRONMENT == 'prod' ? 'production' : params.ENVIRONMENT}"
+        VERSION = "${params.VERSION_TAG ?: BUILD_NUMBER}"
+        
+        // Notification Configuration
+        SLACK_CHANNEL = '#ci-cd-notifications'
+        EMAIL_RECIPIENTS = 'devops-team@oversight.com'
+    }
+    
+    stages {
+        stage('Initialize') {
+            steps {
+                script {
+                    // Set build description
+                    currentBuild.description = "Environment: ${params.ENVIRONMENT} | Version: ${VERSION}"
+                    
+                    // Validate environment
+                    buildUtils.validateEnvironment()
+                    
+                    // Checkout code
+                    buildUtils.checkoutCode()
+                    
+                    // Get commit information
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: "git rev-parse --short HEAD",
+                        returnStdout: true
+                    ).trim()
+                    
+                    env.GIT_BRANCH = sh(
+                        script: "git rev-parse --abbrev-ref HEAD",
+                        returnStdout: true
+                    ).trim()
+                    
+                    // Display build information
+                    buildUtils.displayBuildInfo()
+                }
+            }
+        }
+        
+        stage('Pre-Flight Security Checks') {
+            when {
+                expression { params.RUN_SECURITY_SCAN }
+            }
+            parallel {
+                stage('Secret Scanning') {
+                    steps {
+                        script {
+                            securityUtils.scanForSecrets()
+                        }
+                    }
+                }
+                
+                stage('License Compliance') {
+                    steps {
+                        script {
+                            complianceUtils.checkLicenses()
+                        }
+                    }
+                }
+                
+                stage('Security Headers') {
+                    steps {
+                        script {
+                            securityUtils.checkSecurityHeaders()
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Build & Test') {
+            stages {
+                stage('Install Dependencies') {
+                    steps {
+                        script {
+                            buildUtils.installDependencies()
+                        }
+                    }
+                }
+                
+                stage('Build Application') {
+                    steps {
+                        script {
+                            buildUtils.buildApplication()
+                        }
+                    }
+                }
+                
+                stage('Unit Tests') {
+                    steps {
+                        script {
+                            testUtils.runUnitTests()
+                        }
+                    }
+                    post {
+                        always {
+                            junit 'reports/junit.xml'
+                            publishHTML([
+                                reportDir: 'coverage',
+                                reportFiles: 'index.html',
+                                reportName: 'Coverage Report',
+                                keepAll: true
+                            ])
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Static Analysis & Security Scanning') {
+            when {
+                expression { params.RUN_SECURITY_SCAN }
+            }
+            parallel {
+                stage('SonarQube Analysis') {
+                    steps {
+                        script {
+                            securityUtils.runSonarQube()
+                        }
+                    }
+                }
+                
+                stage('Snyk Dependency Scan') {
+                    steps {
+                        script {
+                            securityUtils.runSnyk()
+                        }
+                    }
+                }
+                
+                stage('Semgrep SAST') {
+                    steps {
+                        script {
+                            securityUtils.runSemgrep()
+                        }
+                    }
+                }
+                
+                stage('OWASP Dependency Check') {
+                    steps {
+                        script {
+                            securityUtils.runOwaspDependencyCheck()
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Container Build') {
+            steps {
+                script {
+                    containerUtils.buildImage()
+                }
+            }
+        }
+        
+        stage('Container Security Scanning') {
+            when {
+                expression { params.RUN_SECURITY_SCAN }
+            }
+            parallel {
+                stage('Trivy Scan') {
+                    steps {
+                        script {
+                            containerUtils.scanWithTrivy()
+                        }
+                    }
+                }
+                
+                stage('Anchore Scan') {
+                    steps {
+                        script {
+                            containerUtils.scanWithAnchore()
+                        }
+                    }
+                }
+                
+                stage('Container Structure Test') {
+                    steps {
+                        script {
+                            containerUtils.testContainerStructure()
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Quality Gates') {
+            steps {
+                script {
+                    qualityGates.evaluate()
+                }
+            }
+        }
+        
+        stage('Push to Registry') {
+            when {
+                expression { 
+                    params.DEPLOY && currentBuild.result != 'FAILURE'
+                }
+            }
+            steps {
+                script {
+                    containerUtils.pushToRegistry()
+                }
+            }
+        }
+        
+        stage('Deploy to Environment') {
+            when {
+                expression { 
+                    params.DEPLOY && currentBuild.result != 'FAILURE'
+                }
+            }
+            steps {
+                script {
+                    if (params.ENVIRONMENT == 'prod') {
+                        // Blue-Green deployment for production
+                        sh """
+                            echo "Deploying to GREEN slot first..."
+                            ./scripts/deploy-blue-green.sh green v${VERSION}
+                            
+                            echo "Starting gradual traffic switch..."
+                            ./scripts/switch-traffic.sh 10
+                            sleep 60
+                            
+                            echo "Checking health metrics..."
+                            if curl -f https://app-oversight-prod-blue-green.azurewebsites.net/health; then
+                                echo "Green slot healthy, increasing traffic..."
+                                ./scripts/switch-traffic.sh 25
+                                sleep 60
+                                ./scripts/switch-traffic.sh 50
+                                sleep 60
+                                ./scripts/switch-traffic.sh 100
+                                echo "✅ Blue-Green deployment successful!"
+                            else
+                                echo "❌ Green slot unhealthy, rolling back..."
+                                ./scripts/rollback-deployment.sh --reason="Health check failed"
+                                error("Deployment rolled back due to health check failure")
+                            fi
+                        """
+                    } else {
+                        // Standard deployment for non-prod
+                        deployUtils.deployToEnvironment(params.ENVIRONMENT)
+                    }
+                }
+            }
+        }
+        
+        stage('Post-Deployment Tests') {
+            when {
+                expression { 
+                    params.DEPLOY && params.RUN_INTEGRATION_TESTS
+                }
+            }
+            parallel {
+                stage('Smoke Tests') {
+                    steps {
+                        script {
+                            testUtils.runSmokeTests(params.ENVIRONMENT)
+                        }
+                    }
+                }
+                
+                stage('Integration Tests') {
+                    when {
+                        expression { params.ENVIRONMENT != 'prod' }
+                    }
+                    steps {
+                        script {
+                            testUtils.runIntegrationTests(params.ENVIRONMENT)
+                        }
+                    }
+                }
+                
+                stage('Performance Tests') {
+                    when {
+                        expression { params.ENVIRONMENT in ['test', 'staging'] }
+                    }
+                    steps {
+                        script {
+                            testUtils.runPerformanceTests(params.ENVIRONMENT)
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('DAST Security Testing') {
+            when {
+                expression { 
+                    params.RUN_SECURITY_SCAN && 
+                    params.DEPLOY && 
+                    params.ENVIRONMENT != 'prod'
+                }
+            }
+            steps {
+                script {
+                    // Switch test database state for security scanning
+                    sh '''
+                        echo "Switching database to full test data state..."
+                        curl -X POST http://test-data-api:5000/api/test/db-state \
+                            -H 'Content-Type: application/json' \
+                            -d '{"state": "full"}'
+                    '''
+                    
+                    // Run OWASP ZAP DAST scan
+                    def targetUrl = deployUtils.getEnvironmentUrl(params.ENVIRONMENT)
+                    def scanType = params.ENVIRONMENT == 'staging' ? 'full' : 'baseline'
+                    
+                    sh """
+                        echo "Running OWASP ZAP ${scanType} scan on ${targetUrl}..."
+                        ./scripts/run-dast-scan.sh ${targetUrl} ${scanType}
+                    """
+                    
+                    // Parse and evaluate results
+                    def scanResults = sh(
+                        script: "./scripts/parse-zap-results.py ./zap/reports/latest.json --jenkins",
+                        returnStdout: true
+                    ).trim()
+                    
+                    def results = readJSON text: scanResults
+                    
+                    if (!results.passed) {
+                        if (results.summary.High > 0) {
+                            error("❌ DAST scan failed: ${results.summary.High} high severity vulnerabilities found!")
+                        } else {
+                            unstable("⚠️  DAST scan warnings: ${results.summary.Medium} medium severity issues found")
+                        }
+                    }
+                    
+                    // Archive DAST reports
+                    archiveArtifacts artifacts: 'zap/reports/**/*', allowEmptyArchive: false
+                    
+                    // Publish HTML report
+                    publishHTML([
+                        reportDir: 'zap/reports',
+                        reportFiles: 'latest.html',
+                        reportName: 'OWASP ZAP Security Report',
+                        keepAll: true
+                    ])
+                }
+            }
+        }
+        
+        stage('Promote to Next Environment') {
+            when {
+                expression {
+                    params.ENVIRONMENT == 'staging' &&
+                    currentBuild.result != 'FAILURE'
+                }
+            }
+            steps {
+                script {
+                    input message: 'Promote to Production?', 
+                          ok: 'Promote',
+                          submitter: 'admin,lead-dev'
+                    
+                    deployUtils.promoteToProduction()
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                // Generate comprehensive reports
+                reportUtils.generateSecurityReport()
+                reportUtils.generateTestReport()
+                reportUtils.generateDeploymentReport()
+                
+                // Archive artifacts
+                archiveArtifacts artifacts: 'reports/**/*', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'logs/**/*', allowEmptyArchive: true
+                
+                // Record metrics
+                metricsUtils.recordPipelineMetrics()
+            }
+        }
+        
+        success {
+            script {
+                notificationUtils.sendSuccess()
+                
+                // Tag successful builds
+                if (params.ENVIRONMENT == 'prod') {
+                    sh """
+                        git tag -a "v${VERSION}" -m "Production release ${VERSION}"
+                        git push origin "v${VERSION}"
+                    """
+                }
+            }
+        }
+        
+        unstable {
+            script {
+                notificationUtils.sendUnstable()
+            }
+        }
+        
+        failure {
+            script {
+                notificationUtils.sendFailure()
+                
+                // Generate Claude Code fix prompt
+                claudeIntegration.generateFixPrompt()
+                
+                // Create incident ticket
+                incidentUtils.createIncident()
+            }
+        }
+        
+        cleanup {
+            script {
+                // Clean workspace
+                cleanWs(
+                    deleteDirs: true,
+                    disableDeferredWipeout: true,
+                    patterns: [
+                        [pattern: '.git/**', type: 'EXCLUDE'],
+                        [pattern: 'reports/**', type: 'EXCLUDE']
+                    ]
+                )
+            }
+        }
+    }
+}
