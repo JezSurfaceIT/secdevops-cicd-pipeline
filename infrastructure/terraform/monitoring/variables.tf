@@ -124,3 +124,63 @@ variable "email_domain" {
   type        = string
   default     = "oversight.com"
 }
+
+# Grafana Variables
+variable "grafana_replicas" {
+  description = "Number of Grafana replicas for HA"
+  type        = number
+  default     = 3
+  
+  validation {
+    condition     = var.grafana_replicas >= 3
+    error_message = "Grafana requires at least 3 replicas for HA."
+  }
+}
+
+variable "grafana_version" {
+  description = "Grafana container image version"
+  type        = string
+  default     = "10.2.0"
+}
+
+variable "grafana_domain" {
+  description = "Domain name for Grafana"
+  type        = string
+  default     = "monitoring.oversight.com"
+}
+
+variable "grafana_admin_user" {
+  description = "Grafana admin username"
+  type        = string
+  default     = "admin"
+}
+
+variable "grafana_admin_password" {
+  description = "Grafana admin password"
+  type        = string
+  sensitive   = true
+}
+
+variable "grafana_db_host" {
+  description = "PostgreSQL host for Grafana"
+  type        = string
+  default     = "e2e-dev-eus-grafana-psql"
+}
+
+variable "grafana_db_password" {
+  description = "PostgreSQL password for Grafana"
+  type        = string
+  sensitive   = true
+}
+
+variable "grafana_db_reader_password" {
+  description = "PostgreSQL reader password for dashboards"
+  type        = string
+  sensitive   = true
+}
+
+variable "grafana_plugins" {
+  description = "Grafana plugins to install"
+  type        = string
+  default     = "grafana-azure-monitor-datasource,grafana-piechart-panel,grafana-worldmap-panel"
+}

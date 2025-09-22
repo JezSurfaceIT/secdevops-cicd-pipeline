@@ -1,0 +1,79 @@
+name: Dashboard CI
+
+on:
+  push:
+    paths:
+      - 'infrastructure/dashboards/**'
+      - 'dashboards/**'
+  pull_request:
+    paths:
+      - 'infrastructure/dashboards/**'
+      - 'dashboards/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install Tools
+        run: |
+          pip install grafana-dashboard-validator
+          npm install -g jsonnet
+      
+      - name: Validate JSON Dashboards
+        run: |
+          for dashboard in infrastructure/dashboards/**/*.json dashboards/**/*.json; do
+            if [ -f "$dashboard" ]; then
+              echo "Validating $dashboard"
+              python -m json.tool "$dashboard" > /dev/null || exit 1
+            fi
+          done
+      
+      - name: Check Dashboard Structure
+        run: |
+          for dashboard in infrastructure/dashboards/**/*.json dashboards/**/*.json; do
+            if [ -f "$dashboard" ]; then
+              echo "Checking structure of $dashboard"
+              # Check for required fields
+              jq -e '.dashboard.title' "$dashboard" > /dev/null || (echo "Missing title in $dashboard" && exit 1)
+              jq -e '.dashboard.panels' "$dashboard" > /dev/null || (echo "Missing panels in $dashboard" && exit 1)
+            fi
+          done
+  
+  deploy:
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Deploy to Grafana
+        env:
+          GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
+          GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+        run: |
+          if [ -n "$GRAFANA_URL" ] && [ -n "$GRAFANA_API_KEY" ]; then
+            for dashboard in infrastructure/dashboards/**/*.json dashboards/**/*.json; do
+              if [ -f "$dashboard" ]; then
+                echo "Deploying $dashboard"
+                curl -X POST \
+                  -H "Authorization: Bearer ${GRAFANA_API_KEY}" \
+                  -H "Content-Type: application/json" \
+                  -d @"$dashboard" \
+                  "${GRAFANA_URL}/api/dashboards/db" || true
+              fi
+            done
+          else
+            echo "Grafana deployment skipped - credentials not configured"
+          fi

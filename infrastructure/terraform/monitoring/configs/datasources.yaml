@@ -1,0 +1,50 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    url: ${prometheus_url}
+    access: proxy
+    isDefault: true
+    jsonData:
+      timeInterval: "30s"
+      queryTimeout: "60s"
+      httpMethod: POST
+  
+  - name: Prometheus-Thanos
+    type: prometheus
+    url: ${thanos_url}
+    access: proxy
+    jsonData:
+      timeInterval: "5m"
+      queryTimeout: "300s"
+  
+  - name: Loki
+    type: loki
+    url: ${loki_url}
+    access: proxy
+    jsonData:
+      maxLines: 1000
+  
+  - name: Azure Monitor
+    type: grafana-azure-monitor-datasource
+    access: proxy
+    jsonData:
+      clientId: ${azure_client_id}
+      cloudName: AzureCloud
+      tenantId: ${azure_tenant_id}
+      subscriptionId: ${azure_subscription_id}
+    secureJsonData:
+      clientSecret: ${azure_client_secret}
+  
+  - name: PostgreSQL
+    type: postgres
+    url: ${db_host}:5432
+    user: grafana_reader
+    secureJsonData:
+      password: ${db_reader_password}
+    jsonData:
+      database: oversight_prod
+      sslmode: require
+      postgresVersion: 1400
+      timescaledb: false

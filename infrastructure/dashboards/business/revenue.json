@@ -1,0 +1,28 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "business-revenue",
+    "title": "Revenue Dashboard",
+    "tags": ["business", "revenue"],
+    "timezone": "browser",
+    "schemaVersion": 30,
+    "version": 1,
+    "refresh": "5m",
+    "panels": [
+      {
+        "id": 1,
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+        "type": "timeseries",
+        "title": "Revenue Over Time",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "sum(rate(payment_amount_total[1h]))",
+            "legendFormat": "Revenue per Hour",
+            "refId": "A"
+          }
+        ]
+      }
+    ]
+  }
+}

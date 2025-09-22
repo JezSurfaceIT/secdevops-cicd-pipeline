@@ -1,0 +1,247 @@
+# Helm values for Grafana deployment with HA and Azure AD SSO
+replicas: 3
+
+image:
+  repository: grafana/grafana
+  tag: 10.2.0
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3000
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+
+ingress:
+  enabled: true
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/affinity-mode: "persistent"
+  hosts:
+    - monitoring.oversight.com
+  tls:
+    - secretName: grafana-tls
+      hosts:
+        - monitoring.oversight.com
+
+persistence:
+  enabled: true
+  storageClassName: managed-premium
+  size: 10Gi
+
+adminUser: admin
+adminPassword: ${GRAFANA_ADMIN_PASSWORD}
+
+grafana.ini:
+  server:
+    domain: monitoring.oversight.com
+    root_url: https://monitoring.oversight.com
+    enable_gzip: true
+  
+  database:
+    type: postgres
+    host: ${DB_HOST}:5432
+    name: grafana
+    user: grafana
+    password: ${DB_PASSWORD}
+    ssl_mode: require
+    max_open_conn: 100
+    max_idle_conn: 100
+    conn_max_lifetime: 14400
+  
+  auth:
+    disable_login_form: false
+    oauth_auto_login: true
+  
+  auth.azuread:
+    enabled: true
+    name: Azure AD
+    allow_sign_up: true
+    client_id: ${AZURE_CLIENT_ID}
+    client_secret: ${AZURE_CLIENT_SECRET}
+    scopes: openid email profile
+    auth_url: https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize
+    token_url: https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token
+    api_url: https://graph.microsoft.com/v1.0/me
+    allowed_domains: oversight.com
+    role_attribute_path: contains(groups[*], 'Admin') && 'Admin' || 'Viewer'
+  
+  analytics:
+    reporting_enabled: false
+    check_for_updates: false
+  
+  log:
+    mode: console
+    level: info
+  
+  alerting:
+    enabled: true
+    execute_alerts: true
+  
+  unified_alerting:
+    enabled: true
+    ha_peers: grafana-0.grafana-headless:9094,grafana-1.grafana-headless:9094,grafana-2.grafana-headless:9094
+    ha_listen_address: 0.0.0.0:9094
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1024Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+nodeSelector:
+  agentpool: monitoring
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+                - grafana
+        topologyKey: kubernetes.io/hostname
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus:9090
+        access: proxy
+        isDefault: true
+        jsonData:
+          timeInterval: "30s"
+          queryTimeout: "60s"
+          httpMethod: POST
+      
+      - name: Prometheus-Thanos
+        type: prometheus
+        url: http://thanos-query:9090
+        access: proxy
+        jsonData:
+          timeInterval: "5m"
+          queryTimeout: "300s"
+      
+      - name: Loki
+        type: loki
+        url: http://loki-gateway:3100
+        access: proxy
+        jsonData:
+          maxLines: 1000
+      
+      - name: Azure Monitor
+        type: grafana-azure-monitor-datasource
+        access: proxy
+        jsonData:
+          clientId: ${AZURE_CLIENT_ID}
+          cloudName: AzureCloud
+          tenantId: ${TENANT_ID}
+          subscriptionId: ${SUBSCRIPTION_ID}
+        secureJsonData:
+          clientSecret: ${AZURE_CLIENT_SECRET}
+      
+      - name: PostgreSQL
+        type: postgres
+        url: ${DB_HOST}:5432
+        user: grafana_reader
+        secureJsonData:
+          password: ${DB_READER_PASSWORD}
+        jsonData:
+          database: oversight_prod
+          sslmode: require
+          postgresVersion: 1400
+          timescaledb: false
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+      
+      - name: 'infrastructure'
+        orgId: 1
+        folder: 'Infrastructure'
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: false
+        options:
+          path: /var/lib/grafana/dashboards/infrastructure
+      
+      - name: 'application'
+        orgId: 1
+        folder: 'Application'
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: false
+        options:
+          path: /var/lib/grafana/dashboards/application
+      
+      - name: 'business'
+        orgId: 1
+        folder: 'Business'
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: false
+        options:
+          path: /var/lib/grafana/dashboards/business
+      
+      - name: 'alerts'
+        orgId: 1
+        folder: 'Alerts'
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: false
+        options:
+          path: /var/lib/grafana/dashboards/alerts
+
+plugins:
+  - grafana-azure-monitor-datasource
+  - grafana-piechart-panel
+  - grafana-worldmap-panel
+  - grafana-clock-panel
+  - grafana-simple-json-datasource
+
+rbac:
+  enabled: true
+  pspEnabled: false
+
+# Multi-tenancy configuration
+multitenancy:
+  enabled: true
+  organizations:
+    - name: Main
+      id: 1
+      admins:
+        - admin@oversight.com
+
+sidecar:
+  dashboards:
+    enabled: true
+    label: grafana_dashboard
+    folder: /tmp/dashboards
+    provider:
+      name: sidecarProvider
+      orgId: 1
+      folder: ''
+      type: file
+      disableDeletion: false
+      allowUiUpdates: false

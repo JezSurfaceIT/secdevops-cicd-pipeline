@@ -1,0 +1,41 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "alerts-overview",
+    "title": "Alert Overview",
+    "tags": ["alerts", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 30,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "type": "alertlist",
+        "title": "Active Alerts",
+        "datasource": "Prometheus",
+        "options": {
+          "showOptions": "current",
+          "maxItems": 100,
+          "sortOrder": 3,
+          "dashboardAlerts": false
+        }
+      },
+      {
+        "id": 2,
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+        "type": "timeseries",
+        "title": "Alert History",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "sum(ALERTS) by (alertname, alertstate)",
+            "legendFormat": "{{alertname}} - {{alertstate}}",
+            "refId": "A"
+          }
+        ]
+      }
+    ]
+  }
+}

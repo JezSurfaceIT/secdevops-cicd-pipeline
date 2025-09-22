@@ -1,0 +1,133 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "azure-resources",
+    "title": "Azure Resources Overview",
+    "tags": ["azure", "infrastructure"],
+    "timezone": "browser",
+    "schemaVersion": 30,
+    "version": 1,
+    "refresh": "1m",
+    "time": {
+      "from": "now-3h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "type": "timeseries",
+        "title": "App Service CPU Usage",
+        "datasource": "Azure Monitor",
+        "targets": [
+          {
+            "queryType": "Azure Monitor",
+            "azureMonitor": {
+              "resourceGroup": "e2e-dev-eus-secops-app-001",
+              "metricDefinition": "Microsoft.Web/sites",
+              "metricName": "CpuPercentage",
+              "aggregation": "Average",
+              "timeGrain": "PT1M"
+            },
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100
+          }
+        }
+      },
+      {
+        "id": 2,
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+        "type": "timeseries",
+        "title": "Request Rate",
+        "datasource": "Azure Monitor",
+        "targets": [
+          {
+            "queryType": "Azure Monitor",
+            "azureMonitor": {
+              "resourceGroup": "e2e-dev-eus-secops-app-001",
+              "metricDefinition": "Microsoft.Web/sites",
+              "metricName": "Requests",
+              "aggregation": "Total",
+              "timeGrain": "PT1M"
+            },
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+        "type": "timeseries",
+        "title": "Response Time",
+        "datasource": "Azure Monitor",
+        "targets": [
+          {
+            "queryType": "Azure Monitor",
+            "azureMonitor": {
+              "resourceGroup": "e2e-dev-eus-secops-app-001",
+              "metricDefinition": "Microsoft.Web/sites",
+              "metricName": "HttpResponseTime",
+              "aggregation": "Average",
+              "timeGrain": "PT1M"
+            },
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      },
+      {
+        "id": 4,
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+        "type": "timeseries",
+        "title": "HTTP Errors",
+        "datasource": "Azure Monitor",
+        "targets": [
+          {
+            "queryType": "Azure Monitor",
+            "azureMonitor": {
+              "resourceGroup": "e2e-dev-eus-secops-app-001",
+              "metricDefinition": "Microsoft.Web/sites",
+              "metricName": "Http4xx",
+              "aggregation": "Total",
+              "timeGrain": "PT1M"
+            },
+            "legendFormat": "4xx Errors",
+            "refId": "A"
+          },
+          {
+            "queryType": "Azure Monitor",
+            "azureMonitor": {
+              "resourceGroup": "e2e-dev-eus-secops-app-001",
+              "metricDefinition": "Microsoft.Web/sites",
+              "metricName": "Http5xx",
+              "aggregation": "Total",
+              "timeGrain": "PT1M"
+            },
+            "legendFormat": "5xx Errors",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      }
+    ]
+  }
+}

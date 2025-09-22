@@ -1,0 +1,68 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "mobile-overview",
+    "title": "Mobile Dashboard",
+    "tags": ["mobile", "responsive"],
+    "timezone": "browser",
+    "schemaVersion": 30,
+    "version": 1,
+    "refresh": "1m",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+        "type": "stat",
+        "title": "System Health",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "up",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "textMode": "value",
+          "graphMode": "none",
+          "colorMode": "background"
+        }
+      },
+      {
+        "id": 2,
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+        "type": "timeseries",
+        "title": "Key Metrics",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total[5m])",
+            "legendFormat": "Request Rate",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "legend": {
+            "displayMode": "hidden"
+          },
+          "tooltip": {
+            "mode": "single"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "lineWidth": 2,
+              "pointSize": 0
+            }
+          }
+        }
+      }
+    ]
+  }
+}

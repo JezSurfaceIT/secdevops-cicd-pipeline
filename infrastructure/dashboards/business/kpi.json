@@ -1,0 +1,155 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "business-kpi",
+    "title": "Business KPI Dashboard",
+    "tags": ["business", "kpi"],
+    "timezone": "browser",
+    "schemaVersion": 30,
+    "version": 1,
+    "refresh": "5m",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "type": "timeseries",
+        "title": "Daily Active Users",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "count(rate(user_login_total[1d]))",
+            "legendFormat": "DAU",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+        "type": "stat",
+        "title": "Total Revenue",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "sum(payment_amount_total)",
+            "legendFormat": "Total Revenue",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+        "type": "stat",
+        "title": "Daily Revenue",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "increase(payment_amount_total[1d])",
+            "legendFormat": "Daily Revenue",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD"
+          }
+        }
+      },
+      {
+        "id": 4,
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+        "type": "bargauge",
+        "title": "Conversion Funnel",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "visitors_total{step=\"landing\"} / visitors_total{step=\"landing\"} * 100",
+            "legendFormat": "Landing Page",
+            "instant": true,
+            "refId": "A"
+          },
+          {
+            "expr": "visitors_total{step=\"signup\"} / visitors_total{step=\"landing\"} * 100",
+            "legendFormat": "Sign Up",
+            "instant": true,
+            "refId": "B"
+          },
+          {
+            "expr": "visitors_total{step=\"trial\"} / visitors_total{step=\"signup\"} * 100",
+            "legendFormat": "Start Trial",
+            "instant": true,
+            "refId": "C"
+          },
+          {
+            "expr": "visitors_total{step=\"paid\"} / visitors_total{step=\"trial\"} * 100",
+            "legendFormat": "Paid",
+            "instant": true,
+            "refId": "D"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100
+          }
+        }
+      },
+      {
+        "id": 5,
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
+        "type": "gauge",
+        "title": "Customer Satisfaction",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "avg(customer_satisfaction_score)",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 70 },
+                { "color": "green", "value": 85 }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "gridPos": { "h": 8, "w": 18, "x": 6, "y": 8 },
+        "type": "heatmap",
+        "title": "Feature Usage",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(feature_usage_total[1h])",
+            "format": "heatmap",
+            "refId": "A"
+          }
+        ]
+      }
+    ]
+  }
+}

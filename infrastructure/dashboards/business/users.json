@@ -1,0 +1,28 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "business-users",
+    "title": "User Metrics Dashboard",
+    "tags": ["business", "users"],
+    "timezone": "browser",
+    "schemaVersion": 30,
+    "version": 1,
+    "refresh": "5m",
+    "panels": [
+      {
+        "id": 1,
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "type": "stat",
+        "title": "Total Users",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "count(user_info)",
+            "instant": true,
+            "refId": "A"
+          }
+        ]
+      }
+    ]
+  }
+}
