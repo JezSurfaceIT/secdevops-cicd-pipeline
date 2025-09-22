@@ -56,14 +56,20 @@ sections:
     type: bullet-list
     instruction: |
       Break down the story into specific tasks and subtasks needed for implementation.
+      MANDATORY: All tasks MUST follow TDD (Test-Driven Development) approach.
+      MANDATORY: All infrastructure changes MUST use IaC (Infrastructure as Code) - NO direct Azure changes.
       Reference applicable acceptance criteria numbers where relevant.
     template: |
-      - [ ] Task 1 (AC: # if applicable)
+      - [ ] Write failing tests for Task 1 (TDD FIRST) (AC: # if applicable)
+      - [ ] Implement Task 1 to make tests pass (AC: # if applicable)
         - [ ] Subtask1.1...
-      - [ ] Task 2 (AC: # if applicable)
+      - [ ] Write failing tests for Task 2 (TDD FIRST) (AC: # if applicable)
+      - [ ] Implement Task 2 to make tests pass (AC: # if applicable)
         - [ ] Subtask 2.1...
-      - [ ] Task 3 (AC: # if applicable)
+      - [ ] Write failing tests for Task 3 (TDD FIRST) (AC: # if applicable)
+      - [ ] Implement Task 3 to make tests pass (AC: # if applicable)
         - [ ] Subtask 3.1...
+      - [ ] If infrastructure changes needed: Update IaC code ONLY (NO direct Azure changes)
     elicit: true
     owner: scrum-master
     editors: [scrum-master, dev-agent]
@@ -72,6 +78,23 @@ sections:
     title: Dev Notes
     instruction: |
       Populate relevant information, only what was pulled from actual artifacts from docs folder, relevant to this story:
+      
+      CRITICAL REQUIREMENTS:
+      - TDD MANDATORY: All code MUST be written test-first (write failing test → implement → make test pass)
+      - IaC-FIRST MANDATORY: ALL infrastructure changes MUST be done via IaC (Terraform/ARM/Bicep)
+      - NO DIRECT AZURE CHANGES: If something doesn't work, fix the IaC code, not the Azure resource
+      - If an issue arises in Azure, the solution is ALWAYS to fix the IaC and redeploy
+      
+      RESOURCE GROUP NAMING CONVENTION (MANDATORY):
+      - Format: e2e-{environment}-{region}-{project}-{component}-{instance}
+      - Environment: dev, test, staging, prod
+      - Region: eus (East US), wus (West US), neu (North Europe), etc.
+      - Project: abbreviated project name (max 10 chars)
+      - Component: app, data, network, security, shared, monitoring
+      - Instance: 001, 002, 003 (for multiple instances)
+      - Example: e2e-prod-eus-secops-app-001
+      - All child resources must follow similar hierarchical naming
+      
       - Do not invent information
       - If known add Relevant Source Tree info that relates to this story
       - If there were important notes from previous story that are relevant to this one, include them here
@@ -84,10 +107,18 @@ sections:
         title: Testing
         instruction: |
           List Relevant Testing Standards from Architecture the Developer needs to conform to:
+          
+          TDD REQUIREMENTS (MANDATORY):
+          - Write tests BEFORE implementation code
+          - Tests must fail first, then pass after implementation
+          - Each feature/function requires corresponding test coverage
+          - 100% code coverage required - NO EXCEPTIONS
+          
           - Test file location
           - Test standards
           - Testing frameworks and patterns to use
           - Any specific testing requirements for this story
+          - Infrastructure tests must validate IaC deployments
         elicit: true
         owner: scrum-master
         editors: [scrum-master]

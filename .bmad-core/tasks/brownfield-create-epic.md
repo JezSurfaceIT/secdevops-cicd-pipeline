@@ -83,6 +83,10 @@ List 1-3 focused stories that complete the epic:
 - [ ] Database schema changes are backward compatible
 - [ ] UI changes follow existing patterns
 - [ ] Performance impact is minimal
+- [ ] ALL infrastructure changes via IaC (NO direct Azure modifications)
+- [ ] TDD approach used for all new/modified code
+- [ ] Resource groups follow naming: e2e-{env}-{region}-{project}-{component}-{instance}
+- [ ] All Azure resources follow hierarchical naming convention
 
 #### Risk Mitigation
 
@@ -93,10 +97,14 @@ List 1-3 focused stories that complete the epic:
 #### Definition of Done
 
 - [ ] All stories completed with acceptance criteria met
+- [ ] ALL CODE written using TDD (test-first approach)
+- [ ] ALL infrastructure changes implemented via IaC ONLY
 - [ ] Existing functionality verified through testing
 - [ ] Integration points working correctly
 - [ ] Documentation updated appropriately
 - [ ] No regression in existing features
+- [ ] Test coverage 100% achieved - NO EXCEPTIONS
+- [ ] IaC code reviewed and validated
 
 ### 3. Validation Checklist
 
@@ -133,11 +141,15 @@ Once the epic is validated, provide this handoff to the Story Manager:
 
 "Please develop detailed user stories for this brownfield epic. Key considerations:
 
+- MANDATORY: All development MUST use TDD (write tests first, then implementation)
+- MANDATORY: All infrastructure changes MUST use IaC - NO direct Azure changes allowed
+- If Azure issues arise, fix the IaC code and redeploy - never modify Azure directly
 - This is an enhancement to an existing system running {{technology stack}}
 - Integration points: {{list key integration points}}
 - Existing patterns to follow: {{relevant existing patterns}}
 - Critical compatibility requirements: {{key requirements}}
 - Each story must include verification that existing functionality remains intact
+- Each story must include test-first task breakdown
 
 The epic should maintain system integrity while delivering {{epic goal}}."
 

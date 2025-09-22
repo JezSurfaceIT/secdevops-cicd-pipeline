@@ -97,7 +97,24 @@ Note: We don't need every file listed - just the important ones.]]
 - [ ] Domain-specific terms or concepts are explained
 - [ ] Edge cases or error scenarios are addressed
 
-## 5. TESTING GUIDANCE
+## 5. INFRASTRUCTURE AS CODE (IaC) COMPLIANCE
+
+[[LLM: ALL infrastructure must be managed via code. Verify:
+
+1. IaC-only mandate is explicitly stated
+2. NO direct Azure Portal/CLI modifications allowed
+3. Fix-forward approach is documented (fix IaC, not Azure)
+4. IaC files/modules to modify are identified
+5. Deployment approach is specified]]
+
+- [ ] IaC-first requirement explicitly stated
+- [ ] Prohibition on direct Azure changes documented
+- [ ] IaC files/modules to create/modify identified
+- [ ] Resource naming convention documented (e2e-{env}-{region}-{project}-{component}-{instance})
+- [ ] Deployment validation process specified
+- [ ] Rollback strategy via IaC defined
+
+## 6. TESTING GUIDANCE
 
 [[LLM: Testing ensures the implementation actually works. Check:
 
@@ -105,12 +122,17 @@ Note: We don't need every file listed - just the important ones.]]
 2. Key test scenarios are listed
 3. Success criteria are measurable
 4. Special test considerations are noted
-5. Acceptance criteria in the story are testable]]
+5. Acceptance criteria in the story are testable
+6. TDD MANDATE: Tests must be written BEFORE implementation
+7. Test coverage requirements are specified (100% REQUIRED)]]
 
 - [ ] Required testing approach is outlined
+- [ ] TDD requirement explicitly stated (tests FIRST, then code)
+- [ ] Test coverage requirements defined (100% REQUIRED)
 - [ ] Key test scenarios are identified
 - [ ] Success criteria are defined
 - [ ] Special testing considerations are noted (if applicable)
+- [ ] Test file locations are specified
 
 ## VALIDATION RESULT
 
@@ -146,7 +168,8 @@ Be pragmatic - perfect documentation doesn't exist, but it must be enough to pro
 | 2. Technical Implementation Guidance | _TBD_  |        |
 | 3. Reference Effectiveness           | _TBD_  |        |
 | 4. Self-Containment Assessment       | _TBD_  |        |
-| 5. Testing Guidance                  | _TBD_  |        |
+| 5. Infrastructure as Code Compliance | _TBD_  |        |
+| 6. Testing Guidance & TDD            | _TBD_  |        |
 
 **Final Assessment:**
 
