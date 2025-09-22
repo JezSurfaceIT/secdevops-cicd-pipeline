@@ -1,5 +1,18 @@
 # SecDevOps CI/CD Pipeline - Oversight MVP
 
+## 📚 V8 Architecture Documentation
+
+**All current V8 architecture documentation is located in the [v8/](./v8/) directory.**
+
+**Start here:** [V8 Architecture Summary](./v8/V8-ARCHITECTURE-SUMMARY.md)
+
+### Key V8 Documents:
+- [Complete Architecture Diagram](./v8/COMPLETE-ARCHITECTURE-DIAGRAM-V8-COMPREHENSIVE.md)
+- [Implementation Guide](./v8/IMPLEMENTATION-GUIDE-V8.md)
+- [Deployment Checklist](./v8/DEPLOYMENT-CHECKLIST-V8.md)
+
+---
+
 ## 🚀 GitOps-Driven Deployment Platform
 
 **Version:** 2.0  
